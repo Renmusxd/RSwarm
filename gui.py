@@ -107,8 +107,6 @@ SINGLE_THREAD = True
 if __name__ == "__main__":
 
     world = make_model()
-    if not SINGLE_THREAD:
-        t = Thread(target=update, args=(world,))
     try:
         world.startup()
 
@@ -118,6 +116,7 @@ if __name__ == "__main__":
         gui = GUI(world, win.width, win.height)
 
         if not SINGLE_THREAD:
+            t = Thread(target=update, args=(world,))
             t.start()
         else:
             pyglet.clock.schedule(world.update)
@@ -125,8 +124,8 @@ if __name__ == "__main__":
         @win.event
         def on_draw():
             pyglet.clock.tick()
-            win.clear()
             gui.update()
+            win.clear()
             gui.draw_world()
 
         @win.event

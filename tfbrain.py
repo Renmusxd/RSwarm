@@ -142,10 +142,9 @@ class TensorflowModel:
     """
     SESS = None
     WRITER = None
-    #MERGER = None
+    # MERGER = None
     SESS_HOLDERS = 0
 
-    # TODO: try this:
     # https://stats.stackexchange.com/questions/200006/q-learning-with-neural-network-as-function-approximation/200146
     # https://stats.stackexchange.com/questions/126994/questions-about-q-learning-using-neural-networks
     def __init__(self,ninputs,nactions,hshapes,gamma=0.99):
@@ -184,9 +183,6 @@ class TensorflowModel:
         self.trainer = tf.train.AdamOptimizer(learning_rate=0.0001)
         self.updateModel = self.trainer.minimize(self.loss)
 
-        tf.summary.scalar('loss_{}'.format(TensorflowModel.SESS_HOLDERS), self.loss)
-
-
     def makeqnetwork(self,shape):
         # Build brain model
         state_in = tf.placeholder(shape=[None, shape[0]], dtype=tf.float32)
@@ -221,7 +217,6 @@ class TensorflowModel:
                          self.reward: rewards,
                          self.actions: actions,
                          self.next_state: newinputs}
-            #_ = TensorflowModel.SESS.run([TensorflowModel.MERGER, self.updateModel], feed_dict=feed_dict)
             _ = TensorflowModel.SESS.run([self.updateModel], feed_dict=feed_dict)
 
     def startup(self):
@@ -229,7 +224,6 @@ class TensorflowModel:
             init = tf.global_variables_initializer()
             TensorflowModel.SESS = tf.Session()
             # Logs
-            #TensorflowModel.MERGER = tf.summary.merge_all()
             TensorflowModel.WRITER = tf.summary.FileWriter("output", TensorflowModel.SESS.graph)
             TensorflowModel.SESS.run(init)
 
@@ -238,9 +232,9 @@ class TensorflowModel:
         TensorflowModel.WRITER.close()
 
     def print_diag(self, sample_in):
-        qout,dualqout = TensorflowModel.SESS.run([self.Qout, self.dual_Qout],
-                                                 feed_dict={self.state_in: [sample_in],
-                                                            self.next_state: [sample_in]})
+        qout, dualqout = TensorflowModel.SESS.run([self.Qout, self.dual_Qout],
+                                                  feed_dict={self.state_in: [sample_in],
+                                                             self.next_state: [sample_in]})
         print("In:   ", formatarray(sample_in))
         print("Q:    ", formatarray(qout[0]))
 
