@@ -3,19 +3,23 @@ import tensorflow as tf
 import numpy
 import random
 
+import os
 from collections import deque
 
 
 class TFBrain(Brain):
 
-    def __init__(self, ninputs, nactions, hshapes=list((10,10)), gamma=0.99):
-        super().__init__(ninputs, nactions)
+    def __init__(self, name, ninputs, nactions, hshapes=list((10,10)), directory='save', gamma=0.99):
+        super().__init__(name, ninputs, nactions, directory)
         self.eps = 0.2
         self.buffer = RewardBuffer()
-        self.randombrain = ToyBrain(ninputs,nactions)  # For exploration
-        self.tensorbrain = TensorflowModel(ninputs,nactions,hshapes,gamma)
+        self.randombrain = ToyBrain(ninputs,nactions,directory)  # For exploration
+        self.tensorbrain = TensorflowModel(self.name,ninputs,nactions,hshapes,self.directory,gamma)
 
         self.reward_cycle = 0
+
+    def save(self):
+        self.tensorbrain.save()
 
     def think(self, inputs):
         """
@@ -147,10 +151,13 @@ class TensorflowModel:
 
     # https://stats.stackexchange.com/questions/200006/q-learning-with-neural-network-as-function-approximation/200146
     # https://stats.stackexchange.com/questions/126994/questions-about-q-learning-using-neural-networks
-    def __init__(self,ninputs,nactions,hshapes,gamma=0.99):
+    def __init__(self,name,ninputs,nactions,hshapes,directory,gamma=0.99):
 
         # Make a single session if not inherited
         self.inherited_sess = False
+
+        self.name = name
+        self.directory = directory
 
         if TensorflowModel.SESS_HOLDERS == 0:
             # Clear the Tensorflow graph.
@@ -158,9 +165,11 @@ class TensorflowModel:
 
         TensorflowModel.SESS_HOLDERS += 1
 
+        varinits = self.loadormakeinits([ninputs]+hshapes+[nactions])
+
         # Make some models with input/output variables
-        self.state_in, self.Qout, self.qnetvars = self.makeqnetwork([ninputs]+hshapes+[nactions])
-        self.next_state, self.dual_Qout, self.dualnetvars = self.makeqnetwork([ninputs] + hshapes + [nactions])
+        self.state_in, self.Qout, self.qnetvars = self.makeqnetwork(ninputs,varinits)
+        self.next_state, self.dual_Qout, self.dualnetvars = self.makeqnetwork(ninputs,varinits)
 
         self.copy_to_dual = [tf.assign(dualnetvar,qnetvar) for qnetvar, dualnetvar in zip(self.qnetvars,self.dualnetvars)]
 
@@ -183,19 +192,21 @@ class TensorflowModel:
         self.trainer = tf.train.AdamOptimizer(learning_rate=0.0001)
         self.updateModel = self.trainer.minimize(self.loss)
 
-    def makeqnetwork(self,shape):
+    def makeqnetwork(self,inputshape,varinits):
         # Build brain model
-        state_in = tf.placeholder(shape=[None, shape[0]], dtype=tf.float32)
+        state_in = tf.placeholder(shape=[None, inputshape], dtype=tf.float32)
         layer = state_in
         variables = []
-        for i in range(1,len(shape)-1):
-            W = tf.Variable(tf.random_normal([shape[i-1], shape[i]]))
-            b = tf.Variable(tf.random_normal([shape[i]]))
+
+        for i in range(0, len(varinits)-2, 2):
+            W = tf.Variable(varinits[i])
+            b = tf.Variable(varinits[i+1])
             layer = tf.nn.relu(tf.add(tf.matmul(layer,W),b))
             variables.append(W)
             variables.append(b)
-        W = tf.Variable(tf.random_normal([shape[-2], shape[-1]]))
-        b = tf.Variable(tf.random_normal([shape[-1]]))
+        W = tf.Variable(varinits[-2])
+        b = tf.Variable(varinits[-1])
+
         Qout = tf.add(tf.matmul(layer,W),b)
         variables.append(W)
         variables.append(b)
@@ -218,6 +229,7 @@ class TensorflowModel:
                          self.actions: actions,
                          self.next_state: newinputs}
             _ = TensorflowModel.SESS.run([self.updateModel], feed_dict=feed_dict)
+        self.save()
 
     def startup(self):
         if TensorflowModel.SESS is None:
@@ -226,6 +238,39 @@ class TensorflowModel:
             # Logs
             TensorflowModel.WRITER = tf.summary.FileWriter("output", TensorflowModel.SESS.graph)
             TensorflowModel.SESS.run(init)
+
+    def save(self):
+        """
+        Saves variables to directory
+        """
+        print("Saving... ", end='')
+        if not os.path.exists(self.directory):
+            os.makedirs(self.directory)
+        qnetvarvals = TensorflowModel.SESS.run(self.qnetvars)
+        numpy.savez_compressed(os.path.join(self.directory,self.name),*qnetvarvals)
+        print("Done!")
+
+    def loadormakeinits(self,shape):
+        """
+        Loads variables from directory or makes initializers
+        :param shape: shape of network (shape[0] = ninputs, shape[-1] = noutputs)
+        :param directory: directory from which to load
+        :return: flat list of variable inits
+        """
+        savename = os.path.join(self.directory,self.name if self.name.endswith('.npz') else self.name+'.npz')
+        varinits = []
+        if os.path.exists(savename):
+            print("Loading... ", end='')
+            loaded = numpy.load(savename)
+            varinits = [loaded[arr] for arr in loaded]
+            print("Done!")
+        else:
+            for i in range(len(shape)-1):
+                winit = tf.random_normal([shape[i],shape[i+1]])
+                binit = tf.random_normal([shape[i+1]])
+                varinits.append(winit)
+                varinits.append(binit)
+        return varinits
 
     def cleanup(self):
         TensorflowModel.SESS.close()

@@ -109,7 +109,6 @@ if __name__ == "__main__":
     world = make_model()
     try:
         world.startup()
-
         world.update(1)
         win = pyglet.window.Window(750, 750)
         fps_display = pyglet.clock.ClockDisplay(format='%(fps).2f fps')

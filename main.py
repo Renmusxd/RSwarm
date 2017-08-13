@@ -3,13 +3,12 @@ from tfbrain import TFBrain
 
 
 def make_model():
-    world = World(TFBrain)
-    world.make_bot(50, 50)
-    world.make_bot(100, 50)
+    world = World(TFBrain,TFBrain)
     return world
 
 if __name__ == "__main__":
 
     model = make_model()
+    model.startup()
     while True:
         model.update(1)

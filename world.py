@@ -29,8 +29,8 @@ class World:
                       for x in range(tileshape[0])]
         self.predentities = {}
         self.preyentities = {}
-        self.predbrain = Bot.make_brain(predbraincls)
-        self.preybrain = Bot.make_brain(preybraincls)
+        self.predbrain = Bot.make_brain(predbraincls, 'pred')
+        self.preybrain = Bot.make_brain(preybraincls, 'prey')
         self.lock = Lock()
         self.tile_buffer = numpy.ones(tileshape)
         self.entity_buffer = numpy.array([])
@@ -322,3 +322,7 @@ class World:
     def get_bot_values(self):
         with self.lock:
             return self.entity_buffer
+
+    def savebrains(self):
+        self.predbrain.save()
+        self.preybrain.save()

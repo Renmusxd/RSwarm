@@ -60,13 +60,14 @@ class Bot:
         self.mate_timer = 0
 
     @classmethod
-    def make_brain(cls, braincls):
+    def make_brain(cls, braincls, name):
         """
         Make a brain suitable for this bot
+        :param name: brain name
         :param braincls: class of brain to construct
         :return: instance of brain to use
         """
-        brain = braincls(Bot.NINPUTS, Bot.NACTIONS)
+        brain = braincls(name, Bot.NINPUTS, Bot.NACTIONS)
         return brain
 
     def senses(self):
