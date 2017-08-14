@@ -1,6 +1,5 @@
 from abc import ABCMeta, abstractmethod
 import random
-import os
 
 
 class Brain(metaclass=ABCMeta):
@@ -18,13 +17,6 @@ class Brain(metaclass=ABCMeta):
 
     def __init_subclass__(cls, **kwargs):
         pass
-
-    @abstractmethod
-    def save(self):
-        """
-        Saves parameters to default file.
-        """
-        raise NotImplementedError
 
     @abstractmethod
     def think(self, inputs):
@@ -56,7 +48,6 @@ class Brain(metaclass=ABCMeta):
         """
         raise NotImplementedError
 
-
     @abstractmethod
     def startup(self):
         raise NotImplementedError
@@ -74,9 +65,6 @@ class ToyBrain(Brain):
 
     def __init__(self, ninputs, nactions, directory):
         super().__init__('toy', ninputs, nactions, directory)
-
-    def save(self):
-        pass
 
     def think(self, inputs):
         return {entityid: random.randint(0, self.nactions-1)

@@ -239,17 +239,6 @@ class TensorflowModel:
             TensorflowModel.WRITER = tf.summary.FileWriter("output", TensorflowModel.SESS.graph)
             TensorflowModel.SESS.run(init)
 
-    def save(self):
-        """
-        Saves variables to directory
-        """
-        print("Saving... ", end='')
-        if not os.path.exists(self.directory):
-            os.makedirs(self.directory)
-        qnetvarvals = TensorflowModel.SESS.run(self.qnetvars)
-        numpy.savez_compressed(os.path.join(self.directory,self.name),*qnetvarvals)
-        print("Done!")
-
     def loadormakeinits(self,shape):
         """
         Loads variables from directory or makes initializers
@@ -272,9 +261,23 @@ class TensorflowModel:
                 varinits.append(binit)
         return varinits
 
+    def save(self):
+        """
+        Saves variables to directory
+        """
+        print("Saving... ", end='')
+        if not os.path.exists(self.directory):
+            os.makedirs(self.directory)
+        qnetvarvals = TensorflowModel.SESS.run(self.qnetvars)
+        numpy.savez_compressed(os.path.join(self.directory,self.name),*qnetvarvals)
+        print("Done!")
+
     def cleanup(self):
-        TensorflowModel.SESS.close()
-        TensorflowModel.WRITER.close()
+        self.save()
+        TensorflowModel.SESS_HOLDERS -= 1
+        if TensorflowModel.SESS_HOLDERS == 0:
+            TensorflowModel.SESS.close()
+            TensorflowModel.WRITER.close()
 
     def print_diag(self, sample_in):
         qout, dualqout = TensorflowModel.SESS.run([self.Qout, self.dual_Qout],

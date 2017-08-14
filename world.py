@@ -322,7 +322,3 @@ class World:
     def get_bot_values(self):
         with self.lock:
             return self.entity_buffer
-
-    def savebrains(self):
-        self.predbrain.save()
-        self.preybrain.save()
