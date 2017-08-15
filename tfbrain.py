@@ -18,9 +18,6 @@ class TFBrain(Brain):
 
         self.reward_cycle = 0
 
-    def save(self):
-        self.tensorbrain.save()
-
     def think(self, inputs):
         """
         Provides actions for inputs
