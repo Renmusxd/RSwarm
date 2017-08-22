@@ -162,13 +162,20 @@ class TensorflowModel:
 
         TensorflowModel.SESS_HOLDERS += 1
 
-        varinits = self.loadormakeinits([ninputs]+hshapes+[nactions])
+        varinits, va_varinits = self.loadormakeinits([ninputs]+hshapes+[nactions])
 
         # Make some models with input/output variables
-        self.state_in, self.Qout, self.qnetvars = self.makeqnetwork(ninputs,varinits)
-        self.next_state, self.dual_Qout, self.dualnetvars = self.makeqnetwork(ninputs,varinits)
+        self.state_in, self.Qout, self.qnetvars, self.vvars, self.avars = \
+            self.makeqnetwork(ninputs, varinits, va_varinits)
+        self.next_state, self.dual_Qout, self.dualnetvars, self.dualvvars, self.dualavars = \
+            self.makeqnetwork(ninputs, varinits, va_varinits)
 
-        self.copy_to_dual = [tf.assign(dualnetvar,qnetvar) for qnetvar, dualnetvar in zip(self.qnetvars,self.dualnetvars)]
+        self.copy_to_dual = [tf.assign(dualnetvar, qnetvar) for qnetvar, dualnetvar in
+                             zip(self.qnetvars, self.dualnetvars)]
+        self.copy_to_dual += [tf.assign(dualvvar, vvar) for vvar, dualvvar in
+                              zip(self.vvars, self.dualvvars)]
+        self.copy_to_dual += [tf.assign(dualavar, avar) for avar, dualavar in
+                              zip(self.avars, self.dualavars)]
 
         # Then combine them together to get our final Q-values.
         self.chosen_actions = tf.argmax(self.Qout, 1)
@@ -189,11 +196,19 @@ class TensorflowModel:
         self.trainer = tf.train.AdamOptimizer(learning_rate=0.0001)
         self.updateModel = self.trainer.minimize(self.loss)
 
-    def makeqnetwork(self,inputshape,varinits):
+    def makeqnetwork(self,inputshape,varinits,valueadvantageinits=None):
+        """
+        Construct graph
+        :param inputshape:
+        :param varinits:
+        :param valueadvantageinits: tuple of (valueinits,advantageinits)
+        :return: input placeholder, output layer, list of variables
+        """
         # Build brain model
         state_in = tf.placeholder(shape=[None, inputshape], dtype=tf.float32)
         layer = state_in
         variables = []
+        v_variables, a_variables = [], []
 
         for i in range(0, len(varinits)-2, 2):
             W = tf.Variable(varinits[i])
@@ -203,11 +218,46 @@ class TensorflowModel:
             variables.append(b)
         W = tf.Variable(varinits[-2])
         b = tf.Variable(varinits[-1])
-
-        Qout = tf.add(tf.matmul(layer,W),b)
+        layer = tf.add(tf.matmul(layer, W), b)
         variables.append(W)
         variables.append(b)
-        return state_in, Qout, variables
+
+        if valueadvantageinits is not None:
+            valueinits, advantageinits = valueadvantageinits
+
+            # Make value pipeline
+            v_layer = layer
+            for i in range(0, len(valueinits) - 2, 2):
+                W = tf.Variable(valueinits[i])
+                b = tf.Variable(valueinits[i + 1])
+                v_layer = tf.nn.relu(tf.add(tf.matmul(v_layer, W), b))
+                v_variables.append(W)
+                v_variables.append(b)
+            W = tf.Variable(valueinits[-2])
+            b = tf.Variable(valueinits[-1])
+            v_layer = tf.add(tf.matmul(v_layer, W), b)
+            v_variables.append(W)
+            v_variables.append(b)
+
+            # Make advantage pipeline
+            a_layer = layer
+            for i in range(0, len(advantageinits) - 2, 2):
+                W = tf.Variable(advantageinits[i])
+                b = tf.Variable(advantageinits[i + 1])
+                a_layer = tf.nn.relu(tf.add(tf.matmul(a_layer, W), b))
+                a_variables.append(W)
+                a_variables.append(b)
+            W = tf.Variable(advantageinits[-2])
+            b = tf.Variable(advantageinits[-1])
+            a_layer = tf.add(tf.matmul(a_layer, W), b)
+            a_variables.append(W)
+            a_variables.append(b)
+
+            Qout = v_layer + tf.subtract(a_layer, tf.reduce_mean(a_layer, axis=1, keep_dims=True))
+        else:
+            Qout = layer
+
+        return state_in, Qout, variables, v_variables, a_variables
 
     def feedforward(self, inputs):
         ids = list(inputs.keys())
@@ -236,27 +286,54 @@ class TensorflowModel:
             TensorflowModel.WRITER = tf.summary.FileWriter("output", TensorflowModel.SESS.graph)
             TensorflowModel.SESS.run(init)
 
-    def loadormakeinits(self,shape):
+    def loadormakeinits(self,shape,valueadvantageshape=None):
         """
         Loads variables from directory or makes initializers
-        :param shape: shape of network (shape[0] = ninputs, shape[-1] = noutputs)
+        :param shape: shape of network (shape[0] = ninputs)
         :param directory: directory from which to load
-        :return: flat list of variable inits
+        :return: varinits, (v-a_varinits or None)
         """
         savename = os.path.join(self.directory,self.name if self.name.endswith('.npz') else self.name+'.npz')
-        varinits = []
         if os.path.exists(savename):
             print("Loading... ", end='')
             loaded = numpy.load(savename)
-            varinits = [loaded[arr] for arr in loaded]
+            loaded_mat = numpy.array([loaded[a] for a in loaded])
+            varinits = loaded_mat[0]
+            if len(loaded_mat) > 1:
+                v_varinits = loaded_mat[1]
+                a_varinits = loaded_mat[2]
+                va_varinits = (v_varinits, a_varinits)
+            else:
+                va_varinits = None
             print("Done!")
         else:
+            # For each of the shape, value, and advantage
+            varinits = []
             for i in range(len(shape)-1):
                 winit = tf.random_normal([shape[i],shape[i+1]])
                 binit = tf.random_normal([shape[i+1]])
                 varinits.append(winit)
                 varinits.append(binit)
-        return varinits
+
+            if valueadvantageshape is None:
+                va_varinits = None
+            else:
+                v_shape, a_shape = valueadvantageshape
+
+                v_varinits = []
+                for i in range(len(v_shape)-1):
+                    winit = tf.random_normal([v_shape[i],v_shape[i+1]])
+                    binit = tf.random_normal([v_shape[i+1]])
+                    v_varinits.append(winit)
+                    v_varinits.append(binit)
+                a_varinits = []
+                for i in range(len(v_shape) - 1):
+                    winit = tf.random_normal([a_shape[i], a_shape[i + 1]])
+                    binit = tf.random_normal([a_shape[i + 1]])
+                    a_varinits.append(winit)
+                    a_varinits.append(binit)
+                va_varinits = (v_varinits, a_varinits)
+        return varinits, va_varinits
 
     def save(self):
         """
@@ -266,7 +343,9 @@ class TensorflowModel:
         if not os.path.exists(self.directory):
             os.makedirs(self.directory)
         qnetvarvals = TensorflowModel.SESS.run(self.qnetvars)
-        numpy.savez_compressed(os.path.join(self.directory,self.name),*qnetvarvals)
+        vvarvals = TensorflowModel.SESS.run(self.vvars)
+        avarvals = TensorflowModel.SESS.run(self.avars)
+        numpy.savez_compressed(os.path.join(self.directory,self.name), [qnetvarvals,vvarvals,avarvals])
         print("Done!")
 
     def cleanup(self):

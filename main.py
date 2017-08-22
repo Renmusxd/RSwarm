@@ -9,6 +9,10 @@ def make_model():
 if __name__ == "__main__":
 
     model = make_model()
-    model.startup()
-    while True:
-        model.update(1)
+    try:
+        model.startup()
+        while True:
+            model.update(1)
+    finally:
+        print("Cleaning up...")
+        model.cleanup()

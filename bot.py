@@ -27,8 +27,13 @@ class Bot:
 
     # Rewards
     DEATH_REWARD = -100.
-    ATTACK_PRED_REWARD = 20.
-    ATTACK_PREY_REWARD = 0.
+
+    ATTACK_PRED_PRED_REWARD = -20.
+    ATTACK_PRED_PREY_REWARD = 20.
+
+    ATTACK_PREY_PRED_REWARD = 0.
+    ATTACK_PREY_PREY_REWARD = -20.
+
     ATTACKED_REWARD = -50.
     ATTACK_FAILED_REWARD = -5.
     EAT_REWARD = 100.  # Scaled by hunger: R (E - e) / E
@@ -143,12 +148,12 @@ class Bot:
     def attack_succeed(self, other):
         if self.can_graze:
             self.attacking = False
-            return Bot.ATTACK_PREY_REWARD
+            return Bot.ATTACK_PREY_PREY_REWARD if other.can_graze else Bot.ATTACK_PREY_PRED_REWARD
         else:
             self.energy += 10*Bot.MAX_ENERGY/2
             other.energy -= Bot.MAX_ENERGY/2
             self.attacking = False
-            return Bot.ATTACK_PRED_REWARD
+            return Bot.ATTACK_PRED_PREY_REWARD if other.can_graze else Bot.ATTACK_PRED_PRED_REWARD
 
     def attack_failed(self):
         self.attacking = False
