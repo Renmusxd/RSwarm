@@ -35,6 +35,8 @@ class World:
         self.lock = Lock()
         self.tile_buffer = numpy.ones(tileshape)
         self.entity_buffer = numpy.array([])
+        self.rolling_predreward = 0
+        self.rolling_preyreward = 0
 
     def update(self,dt):
         # Kill
@@ -82,19 +84,29 @@ class World:
                        for entityid in allpreyactions.keys()}
         entityrewards = [predrewards, preyrewards]
 
-        # Check for attacks in each list, attack closest within distance
+        # Check for attacks in each list, attack closest within distance+fov
         for entitylist, rewards in zip(entitylists, entityrewards):
             attackers = list(filter(lambda b: b.attacking, entitylist.values()))
             max_d2 = Bot.ACTION_RADIUS ** 2
             for attacker in attackers:
                 closest_defender = None
                 closest_distance2 = max_d2
-                # Check in both lists
+                # Vector in direction of sight
+                dirvec = numpy.array([numpy.cos(numpy.deg2rad(attacker.d)),
+                                      numpy.sin(numpy.deg2rad(attacker.d))])
+                # Vector perpendicular (to the left) of the direction of sight
+                perpdirvec = numpy.array([numpy.cos(numpy.deg2rad(attacker.d + 90)),
+                                          numpy.sin(numpy.deg2rad(attacker.d + 90))])
+                # Check in both lists, add if closest and within sight range
                 for defender in itertools.chain(self.predentities.values(), self.preyentities.values()):
                     dist2 = (attacker.x - defender.x) ** 2 + (attacker.y - defender.y) ** 2
                     if 0 < dist2 <= closest_distance2:
-                        closest_defender = defender
-                        closest_distance2 = dist2
+                        deltvec = numpy.array([attacker.x - defender.x, attacker.y - defender.y])
+                        dist = numpy.linalg.norm(deltvec)
+                        angle = numpy.arccos(dirvec.dot(deltvec) / dist) * numpy.sign(perpdirvec.dot(deltvec))
+                        if attacker.d - Bot.FOV < angle < attacker.d + Bot.FOV:
+                            closest_defender = defender
+                            closest_distance2 = dist2
                 if closest_defender is not None:
                     print("{} attacking {} | {} attacking {}"
                           .format(attacker.id,
@@ -159,6 +171,8 @@ class World:
         # Store state, action, reward
         self.predbrain.reward(allpredsenses, allpredactions, predrewards, newpredsenses)
         self.preybrain.reward(allpreysenses, allpreyactions, preyrewards, newpreysenses)
+        self.rolling_predreward += sum(predrewards.values())
+        self.rolling_preyreward += sum(preyrewards.values())
         self.time += 1
 
         willtrain = (self.time % World.TRAIN_FREQ) == 0
@@ -180,9 +194,13 @@ class World:
                     self.tile_buffer[x, y] = self.get_tile_perc(x * World.TILE_SIZE, y * World.TILE_SIZE)
 
         if willtrain:
-            print("Pred: ", len(self.predentities))
-            print("Prey: ", len(self.preyentities))
-            print("Entering training cycle")
+            print("Population:")
+            print("\tPred: {}".format(len(self.predentities)))
+            print("\tPrey: {}".format(len(self.preyentities)))
+            print("Entering training cycle:")
+            print("\tPred reward: {}".format(self.rolling_predreward))
+            print("\tPrey reward: {}".format(self.rolling_preyreward))
+            self.rolling_predreward, self.rolling_preyreward = 0, 0
             self.predbrain.train()
             self.preybrain.train()
             if len(self.predentities) > 0:
@@ -266,6 +284,9 @@ class World:
                                   numpy.sin(numpy.deg2rad(centerd + 90))])
         # Angle bin size
         bind = 2.*fov / nbins
+
+        # TODO: find way to display tile information
+        # TODO: find way to display end-of-map information
 
         # I hate these indented ifs too, but I think they're necessary
         for entity in itertools.chain(self.predentities.values(), self.preyentities.values()):

@@ -2,9 +2,7 @@ from brain import Brain, ToyBrain
 import tensorflow as tf
 import numpy
 import random
-
 import os
-from collections import deque
 
 
 class TFBrain(Brain):
@@ -38,7 +36,6 @@ class TFBrain(Brain):
         :param rewards: dictionary of id:reward
         :param inputs: dictionary of id:[inputs]
         """
-        self.reward_cycle += sum(rewards.values())
         self.buffer.reward(inputs,actions,rewards,newinputs)
 
     def train(self, niters=1000, batch=64):
@@ -48,8 +45,6 @@ class TFBrain(Brain):
         :param batch: batch size
         :return:
         """
-        print("Reward for this cycle: {}".format(self.reward_cycle))
-        self.reward_cycle = 0
         training_gen = self.buffer.get_batch_gen(batchsize=batch, niters=niters)
         self.tensorbrain.trainbatch(training_gen)
 
