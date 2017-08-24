@@ -16,7 +16,8 @@ class World:
     MIN_BOT_REGEN = 2
     MAX_BOT_REGEN = 5
 
-    TRAIN_FREQ = 1000
+    TRAIN_FREQ = 100
+    WORLD_RESET_FREQ = 5000
 
     PRED_COLOR = (1., 0., 0.)
     PREY_COLOR = (0., 0., 1.)
@@ -160,8 +161,8 @@ class World:
         self.preybrain.reward(allpreysenses, allpreyactions, preyrewards, newpreysenses)
         self.time += 1
 
-        willtrain = (self.time % World.TRAIN_FREQ == 0)
-
+        willtrain = (self.time % World.TRAIN_FREQ) == 0
+        willreset = (self.time % World.WORLD_RESET_FREQ) == 0
         with self.lock:
             # Check if need to change buffer
             nentities = len(self.predentities) + len(self.preyentities)
@@ -190,6 +191,11 @@ class World:
             if len(self.predentities) > 0:
                 randomentity = random.choice(list(self.preyentities.values()))
                 self.preybrain.print_diag(randomentity.senses())
+
+        if willreset:
+            print("Resetting world")
+            self.predentities.clear()
+            self.preyentities.clear()
 
     def _kill(self, preds, preys):
         for entity in preds:

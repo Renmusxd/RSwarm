@@ -41,7 +41,7 @@ class TFBrain(Brain):
         self.reward_cycle += sum(rewards.values())
         self.buffer.reward(inputs,actions,rewards,newinputs)
 
-    def train(self, niters=10000, batch=64):
+    def train(self, niters=1000, batch=64):
         """
         Train the brain for a bit based in rewards previously provided
         :param niters: number of training iterations
@@ -162,20 +162,20 @@ class TensorflowModel:
 
         TensorflowModel.SESS_HOLDERS += 1
 
-        varinits, va_varinits = self.loadormakeinits([ninputs]+hshapes+[nactions])
+        mainshape = [ninputs]+hshapes+[nactions]
+        vashape = ([nactions,nactions],[nactions,nactions])
+        varinits, va_varinits = self.loadormakeinits(mainshape,vashape)
 
         # Make some models with input/output variables
         self.state_in, self.Qout, self.qnetvars, self.vvars, self.avars = \
             self.makeqnetwork(ninputs, varinits, va_varinits)
-        self.next_state, self.dual_Qout, self.dualnetvars, self.dualvvars, self.dualavars = \
+        self.next_state, self.dualQout, self.dualnetvars, self.dualvvars, self.dualavars = \
             self.makeqnetwork(ninputs, varinits, va_varinits)
 
+        # Copy each var to dual
         self.copy_to_dual = [tf.assign(dualnetvar, qnetvar) for qnetvar, dualnetvar in
-                             zip(self.qnetvars, self.dualnetvars)]
-        self.copy_to_dual += [tf.assign(dualvvar, vvar) for vvar, dualvvar in
-                              zip(self.vvars, self.dualvvars)]
-        self.copy_to_dual += [tf.assign(dualavar, avar) for avar, dualavar in
-                              zip(self.avars, self.dualavars)]
+                             zip(self.qnetvars + self.vvars + self.avars,
+                                 self.dualnetvars + self.dualvvars + self.dualavars)]
 
         # Then combine them together to get our final Q-values.
         self.chosen_actions = tf.argmax(self.Qout, 1)
@@ -189,7 +189,7 @@ class TensorflowModel:
         # Q of chosen actions
         self.Q = tf.reduce_sum(tf.multiply(self.Qout, self.actions_onehot), axis=1)
         # Q(s,a) = R + y * max_a'( Q(s',a') )
-        self.targetQ = self.reward + gamma * tf.reduce_max(self.dual_Qout,1)
+        self.targetQ = self.reward + gamma * tf.reduce_max(self.dualQout, 1)
 
         self.td_error = tf.square(self.targetQ - self.Q)
         self.loss = tf.reduce_mean(self.td_error)
@@ -286,11 +286,11 @@ class TensorflowModel:
             TensorflowModel.WRITER = tf.summary.FileWriter("output", TensorflowModel.SESS.graph)
             TensorflowModel.SESS.run(init)
 
-    def loadormakeinits(self,shape,valueadvantageshape=None):
+    def loadormakeinits(self, shape, valueadvantageshape=None):
         """
         Loads variables from directory or makes initializers
         :param shape: shape of network (shape[0] = ninputs)
-        :param directory: directory from which to load
+        :param valueadvantageshape: shape of (v,a)
         :return: varinits, (v-a_varinits or None)
         """
         savename = os.path.join(self.directory,self.name if self.name.endswith('.npz') else self.name+'.npz')
@@ -298,10 +298,10 @@ class TensorflowModel:
             print("Loading... ", end='')
             loaded = numpy.load(savename)
             loaded_mat = numpy.array([loaded[a] for a in loaded])
-            varinits = loaded_mat[0]
+            varinits = loaded_mat[0][0]
             if len(loaded_mat) > 1:
-                v_varinits = loaded_mat[1]
-                a_varinits = loaded_mat[2]
+                v_varinits = loaded_mat[0][1]
+                a_varinits = loaded_mat[0][2]
                 va_varinits = (v_varinits, a_varinits)
             else:
                 va_varinits = None
@@ -356,7 +356,7 @@ class TensorflowModel:
             TensorflowModel.WRITER.close()
 
     def print_diag(self, sample_in):
-        qout, dualqout = TensorflowModel.SESS.run([self.Qout, self.dual_Qout],
+        qout, dualqout = TensorflowModel.SESS.run([self.Qout, self.dualQout],
                                                   feed_dict={self.state_in: [sample_in],
                                                              self.next_state: [sample_in]})
         print("In:   ", formatarray(sample_in))

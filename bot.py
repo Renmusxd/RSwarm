@@ -4,9 +4,10 @@ import numpy
 class Bot:
     ID_NUM = 0
     VISION_BINS = 5
+    VISION_CHANNELS = 1 + 1  # grayscale + distance
 
     # energy + age + food_below + vision
-    NINPUTS = 4 + VISION_BINS*4
+    NINPUTS = 4 + VISION_BINS*VISION_CHANNELS
     NACTIONS = 10
 
     VIEW_DIST = 300.0
@@ -76,15 +77,20 @@ class Bot:
         return brain
 
     def senses(self):
+        # Gets back 3 colors + 1 distance
         vision = self.world.get_vision(self.x,self.y,self.d,Bot.FOV,Bot.VIEW_DIST,Bot.VISION_BINS)
-        fvision = vision.flatten()
+        # Convert to [-1, 1] scale
+        vscale = (-vision[:,0] + vision[:,2])
+        distances = vision[:,3]
+
         body = numpy.array([
             self.energy/Bot.MAX_ENERGY,
             self.age/Bot.MAX_AGE,
             self.mate_timer/Bot.MATE_TIMER,
             self.world.get_tile_perc(self.x,self.y)
         ])
-        return numpy.concatenate((body, fvision))
+        state = numpy.concatenate((body, vscale, distances))
+        return state
 
     def act(self, action):
 
