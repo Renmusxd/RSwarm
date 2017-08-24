@@ -12,7 +12,7 @@ class TFBrain(Brain):
     def __init__(self, name, ninputs, nactions, hshapes=list((10,10)), directory='save', gamma=0.99):
         super().__init__(name, ninputs, nactions, directory)
         self.eps = 0.2
-        self.buffer = RewardBuffer()
+        self.buffer = NumpyRewardBuffer(ninputs)
         self.randombrain = ToyBrain(ninputs,nactions,directory)  # For exploration
         self.tensorbrain = TensorflowModel(self.name,ninputs,nactions,hshapes,self.directory,gamma)
 
@@ -66,21 +66,17 @@ class TFBrain(Brain):
 
 
 class RewardBuffer:
-    """
-    Reward buffer is used to store and produce event recall and
-    delayed reward calculations.
-    """
-
-    def __init__(self, buffersize=1000000,removebatch=10000):
+    def __init__(self, inputsize, buffersize=100000):
         """
-        :param gamma: Q learning gamma factor (0 -> short term, 1 -> long term)
-        :param buffersize: Number of entries to store, may be briefly surpassed during deletion
-        :param removebatch: number to remove in event of overflow (approx)
+        :param buffersize:
         """
-        self.experiences = {}
+        self.states = numpy.ndarray(shape=(buffersize,inputsize), dtype=float)
+        self.actions = numpy.ndarray(shape=(buffersize,), dtype=int)
+        self.rewards = numpy.ndarray(shape=(buffersize,), dtype=float)
+        self.nextstates = numpy.ndarray(shape=(buffersize,inputsize), dtype=float)
         self.buffersize = buffersize
-        self.removebatch = removebatch
         self.size = 0
+        self.head = 0
 
     def reward(self,inputs,actions,rewards,newinputs):
         """
@@ -94,19 +90,13 @@ class RewardBuffer:
             entityin, entityact = inputs[entityid], actions[entityid]
             entityrew, entitynewin = rewards[entityid], newinputs[entityid]
 
-            if entityid not in self.experiences:
-                self.experiences[entityid] = deque()
-            self.experiences[entityid].append((entityin,entityact,entityrew,entitynewin))
+            self.states[self.head, :] = entityin
+            self.actions[self.head] = entityact
+            self.rewards[self.head] = entityrew
+            self.nextstates[self.head, :] = entitynewin
 
-            self.size += 1
-        if self.size > self.buffersize:
-            while self.size > self.buffersize-self.removebatch and self.size > 0:
-                for entityid in list(self.experiences.keys()):
-                    rews = self.experiences[entityid]
-                    rews.popleft()
-                    if len(rews) == 0:
-                        self.experiences.pop(entityid)
-                    self.size -= 1
+            self.head = (self.head + 1) % self.buffersize
+            self.size = min(self.size+1, self.buffersize)
 
     def get_batch_gen(self,batchsize,niters):
         """
@@ -117,19 +107,16 @@ class RewardBuffer:
         """
         # Array of all (input, action, reward)
         def gen():
-            # Make flat numpy arrays all inputs, actions, and rewards for each entity
-            flatgen = (item for sublist in self.experiences.values() for item in sublist)
-            flatinputs,flatactions,flatrewards,flatnewinputs = map(numpy.array, zip(*flatgen))
-            nitems = self.size
             # Choose and yield sets of results
             for i in range(niters):
-                choices = numpy.random.choice(nitems,batchsize)
-                yield flatinputs[choices], flatactions[choices], flatrewards[choices], flatnewinputs[choices]
+                choices = numpy.random.choice(self.size,batchsize)
+                yield self.states[choices], self.actions[choices].flatten(), \
+                      self.rewards[choices], self.nextstates[choices]
         return gen()
 
     def clear(self):
-        self.experiences = {}
         self.size = 0
+        self.head = 0
 
     def __len__(self):
         return self.size

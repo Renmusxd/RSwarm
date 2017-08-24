@@ -5,7 +5,6 @@ from bot import Bot
 import pyglet
 from pyglet.gl import *
 import numpy
-import itertools
 from threading import Thread
 
 
@@ -23,12 +22,16 @@ class GUI:
         self.world = world
 
     def update(self):
-        oldcx, oldcy = self.x + (self.ww/self.z) / 2, self.y + (self.wh/self.z) / 2
-        self.z *= self.dz
-        newcx, newcy = self.x + (self.ww/self.z) / 2, self.y + (self.wh/self.z) / 2
+        # Change dx, dy
+        self.x += self.dx
+        self.y += self.dy
 
-        self.x += self.dx + (newcx - oldcx)*0
-        self.y += self.dy + (newcy - oldcy)*0  # TODO: fix
+        # Change zoom
+        self.z *= self.dz
+
+        # Adjust center position: cx = x + ww/2*z ...
+        self.x += self.ww * (self.dz - 1) / (2 * self.z)
+        self.y += self.wh * (self.dz - 1) / (2 * self.z)
 
     def draw_world(self):
         tilepercs = world.get_tile_percs()
@@ -85,7 +88,6 @@ class GUI:
 
     def set_zoom(self, dz):
         self.dz = dz
-
 
 running = True
 

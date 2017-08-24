@@ -1,0 +1,5 @@
+.idea/
+output/
+save/
+**.pyc
+__pycache__/
