@@ -10,7 +10,7 @@ class Bot:
     NINPUTS = 4 + VISION_BINS*VISION_CHANNELS
     NACTIONS = 10
 
-    VIEW_DIST = 300.0
+    VIEW_DIST = 100.0
     FOV = 90
 
     MAX_AGE = 10000

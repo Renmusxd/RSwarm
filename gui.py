@@ -15,11 +15,16 @@ class GUI:
     SCROLL_SPEED = 5
     ZOOM_SPEED = 1.05
 
-    def __init__(self, world, windowwidth, windowheight, x=0, y=0, z=1):
+    def __init__(self, world, windowwidth, windowheight, x=0, y=0, z=None):
         self.ww, self.wh = windowwidth, windowheight
-        self.x, self.y, self.z = x, y, z
+        self.x, self.y = x, y
         self.dx, self.dy, self.dz = 0, 0, 1
         self.world = world
+        self.debug = True
+        if z is None:
+            worldxsize = World.TILE_SIZE * world.tileshape[0]
+            worldysize = World.TILE_SIZE * world.tileshape[1]
+            self.z = min(self.ww/worldxsize,self.wh/worldysize)
 
     def update(self):
         # Change dx, dy
@@ -44,6 +49,9 @@ class GUI:
                 self._draw_tile(x, y, tilepercs[i,j])
         for i in range(botvalues.shape[0]):
             self._draw_bot(botvalues[i,:])
+
+    def set_debug(self, value):
+        self.debug = value
 
     def _draw_tile(self, x, y, energyperc, size=World.TILE_SIZE):
 
@@ -76,11 +84,34 @@ class GUI:
         glScalef(self.z * size, self.z * size, 1.0)
         glRotatef(d - 90.0, 0, 0, 1)
         glColor4f(r, g, b, 1.0)
+        # Bot body
         glBegin(GL_TRIANGLES)
         glVertex2f(-0.3, -0.5, 0)
         glVertex2f(0.3, -0.5, 0)
         glVertex2f(0.0, 0.5, 0)
         glEnd()
+        if self.debug:
+            vbins = Bot.VISION_BINS
+            vangle = Bot.FOV / vbins
+            vdist = Bot.VIEW_DIST / size
+
+            glEnable(GL_BLEND)
+            glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA)
+            glColor4f(r,g,b,0.25)
+            glBegin(GL_TRIANGLES)
+            for i in range(vbins):
+                angleindx = i + int(vbins/2)
+                lowangle = vangle*angleindx
+                highangle = vangle*(angleindx+1)
+                lowx = vdist * numpy.cos(numpy.deg2rad(lowangle))
+                lowy = vdist * numpy.sin(numpy.deg2rad(lowangle))
+                highx = vdist * numpy.cos(numpy.deg2rad(highangle))
+                highy = vdist * numpy.sin(numpy.deg2rad(highangle))
+                glVertex2f(0, 0, 0)
+                glVertex2f(lowx, lowy, 0)
+                glVertex2f(highx, highy, 0)
+            glEnd()
+            glDisable(GL_BLEND)
 
     def add_translate(self,dx,dy):
         self.dx += dx
@@ -143,6 +174,8 @@ if __name__ == "__main__":
                 gui.set_zoom(1. / GUI.ZOOM_SPEED)
             elif symbol == pyglet.window.key.E:
                 gui.set_zoom(GUI.ZOOM_SPEED)
+            elif symbol == pyglet.window.key.D:
+                gui.set_debug(not gui.debug)
 
         @win.event
         def on_key_release(symbol, modifiers):

@@ -12,7 +12,7 @@ class TFBrain(Brain):
     def __init__(self, name, ninputs, nactions, hshapes=list((10,10)), directory='save', gamma=0.99):
         super().__init__(name, ninputs, nactions, directory)
         self.eps = 0.2
-        self.buffer = NumpyRewardBuffer(ninputs)
+        self.buffer = RewardBuffer(ninputs)
         self.randombrain = ToyBrain(ninputs,nactions,directory)  # For exploration
         self.tensorbrain = TensorflowModel(self.name,ninputs,nactions,hshapes,self.directory,gamma)
 
@@ -110,7 +110,7 @@ class RewardBuffer:
             # Choose and yield sets of results
             for i in range(niters):
                 choices = numpy.random.choice(self.size,batchsize)
-                yield self.states[choices], self.actions[choices].flatten(), \
+                yield self.states[choices], self.actions[choices], \
                       self.rewards[choices], self.nextstates[choices]
         return gen()
 
@@ -180,7 +180,7 @@ class TensorflowModel:
 
         self.td_error = tf.square(self.targetQ - self.Q)
         self.loss = tf.reduce_mean(self.td_error)
-        self.trainer = tf.train.AdamOptimizer(learning_rate=0.0001)
+        self.trainer = tf.train.AdamOptimizer(learning_rate=0.0005)
         self.updateModel = self.trainer.minimize(self.loss)
 
     def makeqnetwork(self,inputshape,varinits,valueadvantageinits=None):
