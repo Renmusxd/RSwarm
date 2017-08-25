@@ -1,10 +1,12 @@
+from rewardbuffer import RewardBuffer
+
 from abc import ABCMeta, abstractmethod
 import random
 
 
 class Brain(metaclass=ABCMeta):
 
-    def __init__(self, name, ninputs, nactions, directory='save'):
+    def __init__(self, name, ninputs, nactions, directory='save', rewardbuffer=None):
         """
         Construct a new brain
         :param ninputs: number of inputs
@@ -14,6 +16,7 @@ class Brain(metaclass=ABCMeta):
         self.nactions = nactions
         self.name = name
         self.directory = directory
+        self.buffer = rewardbuffer or RewardBuffer(ninputs)
 
     def __init_subclass__(cls, **kwargs):
         pass
@@ -24,17 +27,6 @@ class Brain(metaclass=ABCMeta):
         Provides actions for inputs
         :param inputs: dictionary of id:input to think about
         :return: dictionary of id:actions
-        """
-        raise NotImplementedError
-
-    @abstractmethod
-    def reward(self, inputs, actions, rewards, newinputs):
-        """
-        Rewards last actions using Q learning approach
-        :param inputs:
-        :param actions:
-        :param rewards:
-        :param newinputs:
         """
         raise NotImplementedError
 
@@ -60,6 +52,16 @@ class Brain(metaclass=ABCMeta):
     def print_diag(self, sample_in):
         raise NotImplementedError
 
+    def reward(self, inputs, actions, rewards, newinputs):
+        """
+        Rewards last actions using Q learning approach
+        :param inputs: dictionary of id:[inputs]
+        :param actions: dictionary of id:[actions]
+        :param rewards: dictionary of id:reward
+        :param newinputs: dictionary of id:[inputs]
+        """
+        self.buffer.reward(inputs,actions,rewards,newinputs)
+
 
 class ToyBrain(Brain):
 
@@ -71,9 +73,6 @@ class ToyBrain(Brain):
                 for entityid in inputs.keys()}
 
     def train(self, iters=1000, batch=64):
-        pass
-
-    def reward(self, inputs, actions, rewards, newinputs):
         pass
 
     def startup(self):

@@ -1,4 +1,5 @@
 from brain import Brain, ToyBrain
+from rewardbuffer import RewardBuffer
 import tensorflow as tf
 import numpy
 import random
@@ -7,12 +8,12 @@ import os
 
 class TFBrain(Brain):
 
-    def __init__(self, name, ninputs, nactions, hshapes=list((10,10)), directory='save', gamma=0.99):
+    def __init__(self, name, ninputs, nactions, directory='save'):
         super().__init__(name, ninputs, nactions, directory)
         self.eps = 0.2
         self.buffer = RewardBuffer(ninputs)
         self.randombrain = ToyBrain(ninputs,nactions,directory)  # For exploration
-        self.tensorbrain = TensorflowModel(self.name,ninputs,nactions,hshapes,self.directory,gamma)
+        self.tensorbrain = TensorflowModel(self.name,ninputs,nactions,directory=self.directory)
 
         self.reward_cycle = 0
 
@@ -27,16 +28,6 @@ class TFBrain(Brain):
             return self.randombrain.think(inputs)
         else:
             return self.tensorbrain.feedforward(inputs)
-
-    def reward(self, inputs, actions, rewards, newinputs):
-        """
-        Rewards last actions using Q learning approach
-        :param inputs: dictionary of id:[inputs]
-        :param actions: dictionary of id:[actions]
-        :param rewards: dictionary of id:reward
-        :param inputs: dictionary of id:[inputs]
-        """
-        self.buffer.reward(inputs,actions,rewards,newinputs)
 
     def train(self, niters=1000, batch=64):
         """
@@ -60,63 +51,6 @@ class TFBrain(Brain):
         self.tensorbrain.print_diag(sample_in)
 
 
-class RewardBuffer:
-    def __init__(self, inputsize, buffersize=100000):
-        """
-        :param buffersize:
-        """
-        self.states = numpy.ndarray(shape=(buffersize,inputsize), dtype=float)
-        self.actions = numpy.ndarray(shape=(buffersize,), dtype=int)
-        self.rewards = numpy.ndarray(shape=(buffersize,), dtype=float)
-        self.nextstates = numpy.ndarray(shape=(buffersize,inputsize), dtype=float)
-        self.buffersize = buffersize
-        self.size = 0
-        self.head = 0
-
-    def reward(self,inputs,actions,rewards,newinputs):
-        """
-        Provide dicts of {id:item}
-        :param inputs:
-        :param actions:
-        :param rewards:
-        :param newinputs:
-        """
-        for entityid in inputs.keys():
-            entityin, entityact = inputs[entityid], actions[entityid]
-            entityrew, entitynewin = rewards[entityid], newinputs[entityid]
-
-            self.states[self.head, :] = entityin
-            self.actions[self.head] = entityact
-            self.rewards[self.head] = entityrew
-            self.nextstates[self.head, :] = entitynewin
-
-            self.head = (self.head + 1) % self.buffersize
-            self.size = min(self.size+1, self.buffersize)
-
-    def get_batch_gen(self,batchsize,niters):
-        """
-        Make a generator which provides batches of items
-        :param batchsize: size of batch
-        :param niters: number of batches to produce
-        :return:
-        """
-        # Array of all (input, action, reward)
-        def gen():
-            # Choose and yield sets of results
-            for i in range(niters):
-                choices = numpy.random.choice(self.size,batchsize)
-                yield self.states[choices], self.actions[choices], \
-                      self.rewards[choices], self.nextstates[choices]
-        return gen()
-
-    def clear(self):
-        self.size = 0
-        self.head = 0
-
-    def __len__(self):
-        return self.size
-
-
 class TensorflowModel:
     """
     This is the actual tensorflow model which is used in the above brain.
@@ -130,7 +64,7 @@ class TensorflowModel:
 
     # https://stats.stackexchange.com/questions/200006/q-learning-with-neural-network-as-function-approximation/200146
     # https://stats.stackexchange.com/questions/126994/questions-about-q-learning-using-neural-networks
-    def __init__(self,name,ninputs,nactions,hshapes,directory,gamma=0.99):
+    def __init__(self,name,ninputs,nactions,hshapes=list((5,5)),directory="save",gamma=0.99):
 
         # Make a single session if not inherited
         self.inherited_sess = False
@@ -144,8 +78,8 @@ class TensorflowModel:
 
         TensorflowModel.SESS_HOLDERS += 1
 
-        mainshape = [ninputs]+hshapes+[nactions]
-        vashape = ([nactions,nactions],[nactions,nactions])
+        mainshape = [ninputs]+hshapes
+        vashape = ([hshapes[-1],nactions],[hshapes[-1],nactions])
         varinits, va_varinits = self.loadormakeinits(mainshape,vashape)
 
         # Make some models with input/output variables
