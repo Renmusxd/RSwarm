@@ -1,62 +1,12 @@
 from brain import Brain, ToyBrain
-from rewardbuffer import RewardBuffer
 import tensorflow as tf
 import numpy
-import random
 import os
 
 
 class TFBrain(Brain):
+    QCopies = 10
 
-    def __init__(self, name, ninputs, nactions, directory='save'):
-        super().__init__(name, ninputs, nactions, directory)
-        self.eps = 0.2
-        self.buffer = RewardBuffer(ninputs)
-        self.randombrain = ToyBrain(ninputs,nactions,directory)  # For exploration
-        self.tensorbrain = TensorflowModel(self.name,ninputs,nactions,directory=self.directory)
-
-        self.reward_cycle = 0
-
-    def think(self, inputs):
-        """
-        Provides actions for inputs
-        :param inputs: dictionary of id:input to think about
-        :return: dictionary of id:action
-        """
-        # If epsilon then explore
-        if random.uniform(0,1) < self.eps:
-            return self.randombrain.think(inputs)
-        else:
-            return self.tensorbrain.feedforward(inputs)
-
-    def train(self, niters=1000, batch=64):
-        """
-        Train the brain for a bit based in rewards previously provided
-        :param niters: number of training iterations
-        :param batch: batch size
-        :return:
-        """
-        training_gen = self.buffer.get_batch_gen(batchsize=batch, niters=niters)
-        self.tensorbrain.trainbatch(training_gen)
-
-    def startup(self):
-        self.randombrain.startup()
-        self.tensorbrain.startup()
-
-    def cleanup(self):
-        self.randombrain.cleanup()
-        self.tensorbrain.cleanup()
-
-    def print_diag(self, sample_in):
-        self.tensorbrain.print_diag(sample_in)
-
-
-class TensorflowModel:
-    """
-    This is the actual tensorflow model which is used in the above brain.
-    Can be swapped out easily while maintaining the reward training code
-    from the TFBrain.
-    """
     SESS = None
     WRITER = None
     # MERGER = None
@@ -64,22 +14,24 @@ class TensorflowModel:
 
     # https://stats.stackexchange.com/questions/200006/q-learning-with-neural-network-as-function-approximation/200146
     # https://stats.stackexchange.com/questions/126994/questions-about-q-learning-using-neural-networks
-    def __init__(self,name,ninputs,nactions,hshapes=list((5,5)),directory="save",gamma=0.99):
-
+    def __init__(self, name, ninputs, nactions, hshapes=list((5, 5)), gamma=0.99, directory="save", rewardbuffer=None):
         # Make a single session if not inherited
+        super().__init__(name, ninputs, nactions,
+                         directory=directory, rewardbuffer=rewardbuffer)
         self.inherited_sess = False
 
         self.name = name
         self.directory = directory
 
-        if TensorflowModel.SESS_HOLDERS == 0:
+        if TFBrain.SESS_HOLDERS == 0:
             # Clear the Tensorflow graph.
             tf.reset_default_graph()
-
-        TensorflowModel.SESS_HOLDERS += 1
+        TFBrain.SESS_HOLDERS += 1
 
         mainshape = [ninputs]+hshapes
-        vashape = ([hshapes[-1],nactions],[hshapes[-1],nactions])
+        vshape = (hshapes[-1], nactions)
+        ashape = (hshapes[-1], nactions)
+        vashape = (vshape, ashape)
         varinits, va_varinits = self.loadormakeinits(mainshape,vashape)
 
         # Make some models with input/output variables
@@ -95,17 +47,21 @@ class TensorflowModel:
 
         # Then combine them together to get our final Q-values.
         self.chosen_actions = tf.argmax(self.Qout, 1)
+        self.chosen_Q = tf.reduce_sum(tf.multiply(self.Qout,
+                                                  tf.one_hot(self.chosen_actions, nactions, dtype=tf.float32)),
+                                      axis=1)
 
         # Below we obtain the loss by taking the sum of squares difference between the target and prediction Q values.
-        self.reward = tf.placeholder(shape=[None], dtype=tf.float32)
+        self.rewards = tf.placeholder(shape=[None], dtype=tf.float32)
         self.actions = tf.placeholder(shape=[None], dtype=tf.int32)
 
         self.actions_onehot = tf.one_hot(self.actions, nactions, dtype=tf.float32)
 
         # Q of chosen actions
         self.Q = tf.reduce_sum(tf.multiply(self.Qout, self.actions_onehot), axis=1)
+
         # Q(s,a) = R + y * max_a'( Q(s',a') )
-        self.targetQ = self.reward + gamma * tf.reduce_max(self.dualQout, 1)
+        self.targetQ = self.rewards + gamma * tf.reduce_max(self.dualQout, 1)
 
         self.td_error = tf.square(self.targetQ - self.Q)
         self.loss = tf.reduce_mean(self.td_error)
@@ -175,32 +131,56 @@ class TensorflowModel:
 
         return state_in, Qout, variables, v_variables, a_variables
 
-    def feedforward(self, inputs):
+    def think(self, inputs):
         ids = list(inputs.keys())
-        acts = TensorflowModel.SESS.run(self.chosen_actions,
-                                        feed_dict={self.state_in: [inputs[entityid] for entityid in ids]})
+        acts = TFBrain.SESS.run(self.chosen_actions,
+                                feed_dict={self.state_in: [inputs[entityid] for entityid in ids]})
         return {entityid: act for entityid, act in zip(ids, acts)}
+
+    def train(self, niters=1000, batch=64):
+        """
+        Train the brain for a bit based in rewards previously provided
+        :param niters: number of training iterations
+        :param batch: batch size
+        :return:
+        """
+        training_gen = self.buffer.get_batch_gen(batchsize=batch, niters=int(niters/TFBrain.QCopies))
+        for i in range(TFBrain.QCopies):
+            self.trainbatch(training_gen)
+        self.save()
 
     def trainbatch(self, gen):
         # Make dual graph identical to primary
-        TensorflowModel.SESS.run(self.copy_to_dual)
+        TFBrain.SESS.run(self.copy_to_dual)
 
         # Train primary
         for inputs, actions, rewards, newinputs in gen:
             feed_dict = {self.state_in: inputs,
-                         self.reward: rewards,
+                         self.rewards: rewards,
                          self.actions: actions,
                          self.next_state: newinputs}
-            _ = TensorflowModel.SESS.run([self.updateModel], feed_dict=feed_dict)
-        self.save()
+            _ = TFBrain.SESS.run([self.updateModel], feed_dict=feed_dict)
 
     def startup(self):
-        if TensorflowModel.SESS is None:
+        if TFBrain.SESS is None:
             init = tf.global_variables_initializer()
-            TensorflowModel.SESS = tf.Session()
+            TFBrain.SESS = tf.Session()
             # Logs
-            TensorflowModel.WRITER = tf.summary.FileWriter("output", TensorflowModel.SESS.graph)
-            TensorflowModel.SESS.run(init)
+            TFBrain.WRITER = tf.summary.FileWriter("output", TFBrain.SESS.graph)
+            TFBrain.SESS.run(init)
+
+    def save(self):
+        """
+        Saves variables to directory
+        """
+        print("Saving... ", end='')
+        if not os.path.exists(self.directory):
+            os.makedirs(self.directory)
+        qnetvarvals = TFBrain.SESS.run(self.qnetvars)
+        vvarvals = TFBrain.SESS.run(self.vvars)
+        avarvals = TFBrain.SESS.run(self.avars)
+        numpy.savez_compressed(os.path.join(self.directory,self.name), [qnetvarvals, vvarvals, avarvals])
+        print("Done!")
 
     def loadormakeinits(self, shape, valueadvantageshape=None):
         """
@@ -209,13 +189,13 @@ class TensorflowModel:
         :param valueadvantageshape: shape of (v,a)
         :return: varinits, (v-a_varinits or None)
         """
-        savename = os.path.join(self.directory,self.name if self.name.endswith('.npz') else self.name+'.npz')
+        savename = os.path.join(self.directory, self.name if self.name.endswith('.npz') else self.name+'.npz')
         if os.path.exists(savename):
             print("Loading... ", end='')
             loaded = numpy.load(savename)
             loaded_mat = numpy.array([loaded[a] for a in loaded])
             varinits = loaded_mat[0][0]
-            if len(loaded_mat) > 1:
+            if len(loaded_mat[0]) > 1:
                 v_varinits = loaded_mat[0][1]
                 a_varinits = loaded_mat[0][2]
                 va_varinits = (v_varinits, a_varinits)
@@ -251,30 +231,17 @@ class TensorflowModel:
                 va_varinits = (v_varinits, a_varinits)
         return varinits, va_varinits
 
-    def save(self):
-        """
-        Saves variables to directory
-        """
-        print("Saving... ", end='')
-        if not os.path.exists(self.directory):
-            os.makedirs(self.directory)
-        qnetvarvals = TensorflowModel.SESS.run(self.qnetvars)
-        vvarvals = TensorflowModel.SESS.run(self.vvars)
-        avarvals = TensorflowModel.SESS.run(self.avars)
-        numpy.savez_compressed(os.path.join(self.directory,self.name), [qnetvarvals,vvarvals,avarvals])
-        print("Done!")
-
     def cleanup(self):
         self.save()
-        TensorflowModel.SESS_HOLDERS -= 1
-        if TensorflowModel.SESS_HOLDERS == 0:
-            TensorflowModel.SESS.close()
-            TensorflowModel.WRITER.close()
+        TFBrain.SESS_HOLDERS -= 1
+        if TFBrain.SESS_HOLDERS == 0:
+            TFBrain.SESS.close()
+            TFBrain.WRITER.close()
 
     def print_diag(self, sample_in):
-        qout, dualqout = TensorflowModel.SESS.run([self.Qout, self.dualQout],
-                                                  feed_dict={self.state_in: [sample_in],
-                                                             self.next_state: [sample_in]})
+        qout, dualqout = TFBrain.SESS.run([self.Qout, self.dualQout],
+                                          feed_dict={self.state_in: [sample_in],
+                                                     self.next_state: [sample_in]})
         print("In:   ", formatarray(sample_in))
         print("Q:    ", formatarray(qout[0]))
 

@@ -1,17 +1,20 @@
 import numpy
-
+from collections import OrderedDict
 
 class Bot:
     ID_NUM = 0
-    VISION_BINS = 5
-    VISION_CHANNELS = 1 + 1  # grayscale + distance
 
-    # energy + age + food_below + vision
-    NINPUTS = 4 + VISION_BINS*VISION_CHANNELS
-    NACTIONS = 10
+    # Populated by GET_NINPUTS
+    VISION = None
+    INPUTS = None
+    NINPUTS = None
+    # Populated by GET_NACTIONS
+    ACTIONS = None
+    NACTIONS = None
 
     VIEW_DIST = 100.0
     FOV = 90
+    VISION_BINS = 5
 
     MAX_AGE = 10000
     MATE_TIMER = 100
@@ -41,7 +44,7 @@ class Bot:
     MATE_REWARD = 100.
     FAILED_MATE_REWARD = -10.
 
-    def __init__(self, x, y, d, world, color, can_graze, energy=MAX_ENERGY, ):
+    def __init__(self, x, y, d, world, color, can_graze, energy=MAX_ENERGY):
         """
         Construct a bot
         :param x: x position
@@ -65,45 +68,30 @@ class Bot:
         self.age = 0
         self.mate_timer = 0
 
-    @classmethod
-    def make_brain(cls, braincls, name):
-        """
-        Make a brain suitable for this bot
-        :param name: brain name
-        :param braincls: class of brain to construct
-        :return: instance of brain to use
-        """
-        brain = braincls(name, Bot.NINPUTS, Bot.NACTIONS)
-        return brain
-
     def senses(self):
-        # Gets back 3 colors + 1 distance
-        vision = self.world.get_vision(self.x,self.y,self.d,Bot.FOV,Bot.VIEW_DIST,Bot.VISION_BINS)
-        # Convert to [-1, 1] scale
-        vscale = (-vision[:,0] + vision[:,2])
-        distances = vision[:,3]
+        # Evaluate vision
+        vision = Bot.VISION.eval(self)
+        # Evaluate introspection
+        body = numpy.array([v(self) for v in Bot.INPUTS.values()])
 
-        body = numpy.array([
-            self.energy/Bot.MAX_ENERGY,
-            self.age/Bot.MAX_AGE,
-            self.mate_timer/Bot.MATE_TIMER,
-            self.world.get_tile_perc(self.x,self.y)
-        ])
-        state = numpy.concatenate((body, vscale, distances))
+        state = numpy.concatenate((body, vision))
+
         return state
 
     def act(self, action):
-
         reward_acc = 0
 
-        still, left, lmov, forward, rmov, right, sprint, eat, mate, atck = (action == i for i in range(Bot.NACTIONS))
+        still, left, lmov, forward, \
+        rmov, right, sprint, eat, \
+        mate, atck = (action == i for i in range(Bot.GET_NACTIONS()))
 
-        if eat and self.can_graze:
-            toeat = min(Bot.EAT_AMOUNT, Bot.MAX_ENERGY - self.energy)
-            eaten = self.world.eat(self.x,self.y,toeat)
-            self.energy += eaten
-            # reward_acc += (eaten/Bot.EAT_AMOUNT) * ((Bot.MAX_ENERGY - self.energy)/Bot.MAX_ENERGY) * Bot.EAT_REWARD
-            reward_acc += eaten * Bot.EAT_REWARD * (Bot.MAX_ENERGY - self.energy)/(Bot.EAT_AMOUNT * Bot.MAX_ENERGY)
+        if eat:
+            if self.can_graze:
+                toeat = min(Bot.EAT_AMOUNT, Bot.MAX_ENERGY - self.energy)
+                eaten = self.world.eat(self.x,self.y,toeat)
+                self.energy += eaten
+                # reward_acc += eaten/Bot.EAT_AMOUNT * (Bot.MAX_ENERGY - self.energy)/Bot.MAX_ENERGY * Bot.EAT_REWARD
+                reward_acc += eaten * Bot.EAT_REWARD * (Bot.MAX_ENERGY - self.energy)/(Bot.EAT_AMOUNT * Bot.MAX_ENERGY)
             self.energy -= 1
         elif mate:
             # Check if meets mating criteria
@@ -152,13 +140,17 @@ class Bot:
         return Bot.FAILED_MATE_REWARD
 
     def attack_succeed(self, other):
+        """
+        Callback for successful attacks
+        :param other:
+        :return: Reward
+        """
+        self.attacking = False
         if self.can_graze:
-            self.attacking = False
             return Bot.ATTACK_PREY_PREY_REWARD if other.can_graze else Bot.ATTACK_PREY_PRED_REWARD
         else:
             self.energy += 10*Bot.MAX_ENERGY/2
             other.energy -= Bot.MAX_ENERGY/2
-            self.attacking = False
             return Bot.ATTACK_PRED_PREY_REWARD if other.can_graze else Bot.ATTACK_PRED_PRED_REWARD
 
     def attack_failed(self):
@@ -168,3 +160,97 @@ class Bot:
     def was_attacked(self, other):
         return Bot.ATTACKED_REWARD
 
+    @staticmethod
+    def split_senses(senses):
+        """
+        Splits senses into introspection senses and vision
+        :param senses: raw input
+        :return: inputs, vision, distance
+        """
+        ins = senses[:len(Bot.INPUTS)]
+        vis, dist = Bot.VISION.split_vision(senses[len(Bot.INPUTS):])
+        return ins, vis, dist
+
+    @staticmethod
+    def label_inputs(inputs):
+        return {k:v for k,v in zip(Bot.INPUTS.keys(),inputs)}
+
+    @staticmethod
+    def make_brain(braincons, name):
+        """
+        Make a brain suitable for this bot
+        :param name: brain name
+        :param braincons: brain constructor function
+        :return: instance of brain to use
+        """
+        brain = braincons(name, Bot.GET_NINPUTS(), Bot.GET_NACTIONS())
+        return brain
+
+    @staticmethod
+    def GET_NINPUTS():
+        if Bot.INPUTS is None:
+            Bot.INPUTS = OrderedDict()
+
+            # Basic senses
+            Bot.INPUTS['energy'] = lambda b: b.energy / Bot.MAX_ENERGY
+            Bot.INPUTS['age'] = lambda b: b.age / Bot.MAX_AGE
+            Bot.INPUTS['mate'] = lambda b: b.mate_timer / Bot.MATE_TIMER
+            Bot.INPUTS['tile'] = lambda b: b.world.get_tile_perc(b.x,b.y)
+
+            # Vision
+            Bot.VISION = BotVision("gray")
+
+            Bot.NINPUTS = len(Bot.INPUTS) + len(Bot.VISION)
+        return Bot.NINPUTS
+
+    @staticmethod
+    def GET_NACTIONS():
+        if Bot.ACTIONS is None:
+            Bot.ACTIONS = ["still", "left", "lmov", "forward",
+                           "rmov", "right", "sprint", "eat",
+                           "mate", "atck"]
+            Bot.NACTIONS = len(Bot.ACTIONS)
+        return Bot.NACTIONS
+
+
+class BotVision:
+    GRAY_SIZE = 2
+    RGB_SIZE = 4
+
+    def __init__(self,color='gray'):
+        """
+        Construct vision mechanic
+        :param vbins: number of vision bins
+        :param fov: field of view in degrees
+        :param color: color format to use (gray or rgb)
+        """
+        self.color = color
+        if self.color == 'gray':
+            self.size = Bot.VISION_BINS * BotVision.GRAY_SIZE
+            self.shape = (Bot.VISION_BINS, BotVision.GRAY_SIZE)
+        elif self.color == 'rgb':
+            self.size = Bot.VISION_BINS * BotVision.RGB_SIZE
+            self.shape = (Bot.VISION_BINS, BotVision.RGB_SIZE)
+
+    def eval(self, bot):
+        # Gets back 3 colors + 1 distance
+        vision = bot.world.get_vision(bot.x, bot.y, bot.d, Bot.FOV, Bot.VIEW_DIST, Bot.VISION_BINS)
+        if self.color == "gray":
+            # Convert to [-1, 1] scale
+            vscale = (-vision[:, 0] + vision[:, 2])
+            distances = vision[:, 3]
+            return numpy.concatenate((vscale,distances))
+        else:
+            return vision.flatten()
+
+    def split_vision(self, vision):
+        """
+        Split into vision and distance components
+        :param vision: raw vision input (as is output from eval)
+        :return: vision, distance
+        """
+        vis = vision.reshape(self.shape)
+        return vis[:,:-1], vis[:,-1]
+
+    def __len__(self):
+        return self.size

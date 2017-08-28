@@ -32,6 +32,7 @@ class World:
         self.preyentities = {}
         self.predbrain = Bot.make_brain(predbraincls, 'pred')
         self.preybrain = Bot.make_brain(preybraincls, 'prey')
+        print(self.predbrain,self.preybrain)
         self.lock = Lock()
         self.tile_buffer = numpy.ones(tileshape)
         self.entity_buffer = numpy.array([])

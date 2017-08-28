@@ -5,7 +5,6 @@ import random
 
 
 class Brain(metaclass=ABCMeta):
-
     def __init__(self, name, ninputs, nactions, directory='save', rewardbuffer=None):
         """
         Construct a new brain
@@ -16,10 +15,9 @@ class Brain(metaclass=ABCMeta):
         self.nactions = nactions
         self.name = name
         self.directory = directory
-        self.buffer = rewardbuffer or RewardBuffer(ninputs)
-
-    def __init_subclass__(cls, **kwargs):
-        pass
+        if rewardbuffer is None:
+            rewardbuffer = RewardBuffer(ninputs)
+        self.buffer = rewardbuffer
 
     @abstractmethod
     def think(self, inputs):
@@ -40,17 +38,14 @@ class Brain(metaclass=ABCMeta):
         """
         raise NotImplementedError
 
-    @abstractmethod
-    def startup(self):
-        raise NotImplementedError
-
-    @abstractmethod
-    def cleanup(self):
-        raise NotImplementedError
-
-    @abstractmethod
     def print_diag(self, sample_in):
-        raise NotImplementedError
+        pass
+
+    def startup(self):
+        pass
+
+    def cleanup(self):
+        pass
 
     def reward(self, inputs, actions, rewards, newinputs):
         """
@@ -60,26 +55,67 @@ class Brain(metaclass=ABCMeta):
         :param rewards: dictionary of id:reward
         :param newinputs: dictionary of id:[inputs]
         """
-        self.buffer.reward(inputs,actions,rewards,newinputs)
+        self.buffer.reward(inputs, actions, rewards, newinputs)
 
 
 class ToyBrain(Brain):
-
-    def __init__(self, ninputs, nactions, directory):
-        super().__init__('toy', ninputs, nactions, directory)
+    def __init__(self, name, ninputs, nactions, directory='save', rewardbuffer=None):
+        super().__init__(name, ninputs, nactions,
+                         directory=directory, rewardbuffer=rewardbuffer)
 
     def think(self, inputs):
-        return {entityid: random.randint(0, self.nactions-1)
+        return {entityid: random.randint(0, self.nactions - 1)
                 for entityid in inputs.keys()}
 
     def train(self, iters=1000, batch=64):
         pass
 
+
+class CombinedBrain(Brain):
+    COMB_ID = 0
+
+    def __init__(self, name, ninputs, nactions, brainA, brainB,
+                 prob=0.5, directory="save", rewardbuffer=None):
+        super().__init__(name, ninputs, nactions,
+                         directory=directory, rewardbuffer=rewardbuffer)
+        self.brainA, self.brainB = brainA, brainB
+        self.p = prob
+
+    def think(self, inputs):
+        if random.random() < self.p:
+            return self.brainA.think(inputs)
+        else:
+            return self.brainB.think(inputs)
+
+    def train(self, iters=1000, batch=64):
+        self.brainA.train(iters, batch)
+        self.brainB.train(iters, batch)
+
     def startup(self):
-        pass
+        self.brainA.startup()
+        self.brainB.startup()
 
     def cleanup(self):
-        pass
+        self.brainA.cleanup()
+        self.brainB.cleanup()
 
-    def print_diag(self, sample_in):
-        pass
+    @staticmethod
+    def make_combined_constructor(brainconsA, brainconsB, p=0.5):
+        """
+        Makes a constructor to combine the two brain constructors given
+        :param brainconsA: constructor for brain A
+        :param brainconsB: constructor for brain B
+        :param p: p of choosing A over B
+        :return: constructor for A-B hybrid
+        """
+        def constructor(name, ninputs, nactions,
+                        directory='save', rewardbuffer=None):
+            if rewardbuffer is None:
+                rewardbuffer = RewardBuffer(ninputs)
+            brainA = brainconsA("C{}A_".format(CombinedBrain.COMB_ID)+name, ninputs, nactions,
+                                directory=directory, rewardbuffer=rewardbuffer)
+            brainB = brainconsB("C{}B_".format(CombinedBrain.COMB_ID)+name, ninputs, nactions,
+                                directory=directory, rewardbuffer=rewardbuffer)
+            return CombinedBrain(name, ninputs, nactions, brainA, brainB, p,
+                                 directory=directory, rewardbuffer=rewardbuffer)
+        return constructor

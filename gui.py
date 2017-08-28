@@ -1,4 +1,5 @@
 from world import World
+from brain import ToyBrain, CombinedBrain
 from tfbrain import TFBrain
 from bot import Bot
 
@@ -129,9 +130,12 @@ def update(world, iters=0):
         world.update(1)
         iternum += 1
 
+def make_brain_constructor():
+    constructor = CombinedBrain.make_combined_constructor(TFBrain,ToyBrain)
+    return constructor
 
 def make_model():
-    world = World(TFBrain,TFBrain)
+    world = World(make_brain_constructor(), make_brain_constructor())
     return world
 
 # Python multithreading slows stuff down
