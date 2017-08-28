@@ -162,6 +162,7 @@ class TFBrain(Brain):
             _ = TFBrain.SESS.run([self.updateModel], feed_dict=feed_dict)
 
     def startup(self):
+        super().startup()
         if TFBrain.SESS is None:
             init = tf.global_variables_initializer()
             TFBrain.SESS = tf.Session()
@@ -179,7 +180,8 @@ class TFBrain(Brain):
         qnetvarvals = TFBrain.SESS.run(self.qnetvars)
         vvarvals = TFBrain.SESS.run(self.vvars)
         avarvals = TFBrain.SESS.run(self.avars)
-        numpy.savez_compressed(os.path.join(self.directory,self.name), [qnetvarvals, vvarvals, avarvals])
+        numpy.savez_compressed(os.path.join(self.directory,self.name),
+                               qnet=qnetvarvals, vvar=vvarvals, avar=avarvals)
         print("Done!")
 
     def loadormakeinits(self, shape, valueadvantageshape=None):
@@ -191,13 +193,12 @@ class TFBrain(Brain):
         """
         savename = os.path.join(self.directory, self.name if self.name.endswith('.npz') else self.name+'.npz')
         if os.path.exists(savename):
-            print("Loading... ", end='')
+            print("Loading brain... ", end='')
             loaded = numpy.load(savename)
-            loaded_mat = numpy.array([loaded[a] for a in loaded])
-            varinits = loaded_mat[0][0]
-            if len(loaded_mat[0]) > 1:
-                v_varinits = loaded_mat[0][1]
-                a_varinits = loaded_mat[0][2]
+            varinits = loaded['qnet']
+            if 'vvar' in loaded:
+                v_varinits = loaded['vvar']
+                a_varinits = loaded['avar']
                 va_varinits = (v_varinits, a_varinits)
             else:
                 va_varinits = None
@@ -232,6 +233,7 @@ class TFBrain(Brain):
         return varinits, va_varinits
 
     def cleanup(self):
+        super().cleanup()
         self.save()
         TFBrain.SESS_HOLDERS -= 1
         if TFBrain.SESS_HOLDERS == 0:

@@ -16,7 +16,7 @@ class Brain(metaclass=ABCMeta):
         self.name = name
         self.directory = directory
         if rewardbuffer is None:
-            rewardbuffer = RewardBuffer(ninputs)
+            rewardbuffer = RewardBuffer("RB_{}".format(name),ninputs)
         self.buffer = rewardbuffer
 
     @abstractmethod
@@ -42,10 +42,16 @@ class Brain(metaclass=ABCMeta):
         pass
 
     def startup(self):
-        pass
+        """
+        If overridden make sure to call super
+        """
+        self.buffer.load()
 
     def cleanup(self):
-        pass
+        """
+        If overridden make sure to call super
+        """
+        self.buffer.save()
 
     def reward(self, inputs, actions, rewards, newinputs):
         """
@@ -92,10 +98,12 @@ class CombinedBrain(Brain):
         self.brainB.train(iters, batch)
 
     def startup(self):
+        super().startup()
         self.brainA.startup()
         self.brainB.startup()
 
     def cleanup(self):
+        super().cleanup()
         self.brainA.cleanup()
         self.brainB.cleanup()
 
@@ -111,10 +119,12 @@ class CombinedBrain(Brain):
         def constructor(name, ninputs, nactions,
                         directory='save', rewardbuffer=None):
             if rewardbuffer is None:
-                rewardbuffer = RewardBuffer(ninputs)
-            brainA = brainconsA("C{}A_".format(CombinedBrain.COMB_ID)+name, ninputs, nactions,
+                rewardbuffer = RewardBuffer("CB{}_{}".format(CombinedBrain.COMB_ID,name),ninputs)
+            brainA = brainconsA("C{}A_{}".format(CombinedBrain.COMB_ID,name),
+                                ninputs, nactions,
                                 directory=directory, rewardbuffer=rewardbuffer)
-            brainB = brainconsB("C{}B_".format(CombinedBrain.COMB_ID)+name, ninputs, nactions,
+            brainB = brainconsB("C{}B_{}".format(CombinedBrain.COMB_ID,name),
+                                ninputs, nactions,
                                 directory=directory, rewardbuffer=rewardbuffer)
             return CombinedBrain(name, ninputs, nactions, brainA, brainB, p,
                                  directory=directory, rewardbuffer=rewardbuffer)

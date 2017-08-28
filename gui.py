@@ -131,7 +131,7 @@ def update(world, iters=0):
         iternum += 1
 
 def make_brain_constructor():
-    constructor = CombinedBrain.make_combined_constructor(TFBrain,ToyBrain)
+    constructor = CombinedBrain.make_combined_constructor(TFBrain,ToyBrain,0.9)
     return constructor
 
 def make_model():
