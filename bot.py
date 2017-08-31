@@ -19,7 +19,7 @@ class Bot:
     MAX_AGE = 10000
     MATE_TIMER = 100
 
-    MAX_ENERGY = 100
+    MAX_ENERGY = 1000
     MOVE_SPEED = 1.0
     SPRINT_SPEED = 3.0
     TURN_SPEED = 5.0

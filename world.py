@@ -281,20 +281,11 @@ class World:
         bins = numpy.zeros((nbins,4))  # 3 colors + 1 distance
         bins[:,3] = 1.0  # Set distances to 1
 
-        # Vector in direction of sight
-        dirvec = numpy.array([numpy.cos(numpy.deg2rad(centerd)),
-                              numpy.sin(numpy.deg2rad(centerd))])
-        # Vector perpendicular (to the left) of the direction of sight
-        perpdirvec = numpy.array([numpy.cos(numpy.deg2rad(centerd + 90)),
-                                  numpy.sin(numpy.deg2rad(centerd + 90))])
         # Angle bin size
         bind = 2.*fov / nbins
-
-        # TODO: fix
         # TODO: find way to display tile information
         # TODO: find way to display end-of-map information
 
-        # I hate these indented ifs too, but I think they're necessary
         for entity in itertools.chain(self.predentities.values(), self.preyentities.values()):
             # Skip self
             if entity.x == x and entity.y == y:
@@ -303,20 +294,13 @@ class World:
             dist = numpy.linalg.norm(deltvec)
             normdelt = deltvec/dist
 
-            # angle = numpy.rad2deg(numpy.arccos(dirvec.dot(deltvec) / dist)) * numpy.sign(perpdirvec.dot(deltvec))
-
             # First get angle from d = 0, then subtract d
-
             z_angle = numpy.rad2deg(numpy.arccos(normdelt[0]))
-            if normdelt[1]<0:
+            if normdelt[1] < 0:
                 z_angle = -z_angle
-            angle = z_angle - centerd
+            angle = modrange(z_angle - centerd, -180, 180)
 
-            while angle > 180:
-                angle -= 360
-            while angle <= -180:
-                angle += 360
-
+            # If angle in FOV
             if -fov < angle < fov:
                 # Get bin
                 binn = int((angle + fov)/bind)
@@ -370,3 +354,12 @@ class World:
     def get_bot_values(self):
         with self.lock:
             return self.entity_buffer
+
+
+def modrange(x,low,high):
+    delt = high - low
+    while x < low:
+        x += delt
+    while x > high:
+        x -= delt
+    return x

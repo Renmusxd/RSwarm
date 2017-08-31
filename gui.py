@@ -137,8 +137,8 @@ def make_brain_constructor(predprey):
     :param predprey: string "pred" or string "prey"
     :return:
     """
-    #constructor = CombinedBrain.make_combined_constructor(TFBrain,ToyBrain,0.9)
-    constructor = PredHeuristicBrain if predprey=='pred' else PreyHeuristicBrain
+    constructor = CombinedBrain.make_combined_constructor(TFBrain,ToyBrain,0.9)
+    #constructor = PredHeuristicBrain if predprey=='pred' else PreyHeuristicBrain
     return constructor
 
 def make_model():
