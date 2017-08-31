@@ -32,7 +32,7 @@ class World:
         self.preyentities = {}
         self.predbrain = Bot.make_brain(predbraincls, 'pred')
         self.preybrain = Bot.make_brain(preybraincls, 'prey')
-        print(self.predbrain,self.preybrain)
+
         self.lock = Lock()
         self.tile_buffer = numpy.ones(tileshape)
         self.entity_buffer = numpy.array([])
@@ -213,8 +213,12 @@ class World:
 
         if willreset:
             print("Resetting world")
-            self.predentities.clear()
-            self.preyentities.clear()
+            self.reset()
+
+    def reset(self):
+        self.predentities.clear()
+        self.preyentities.clear()
+        self._clear_cache()
 
     def _kill(self, preds, preys):
         for entity in preds:
@@ -223,10 +227,10 @@ class World:
             self.preyentities.pop(entity.id)
 
     def make_pred(self, x, y, d=0.0):
-        self.make_bot(self.predentities, x, y, d, World.PRED_COLOR, False)
+        return self.make_bot(self.predentities, x, y, d, World.PRED_COLOR, False)
 
     def make_prey(self, x, y, d=0.0):
-        self.make_bot(self.preyentities, x, y, d, World.PREY_COLOR, True)
+        return self.make_bot(self.preyentities, x, y, d, World.PREY_COLOR, True)
 
     def make_bot(self, entitylist, x, y, d, color, can_graze):
         """
@@ -286,6 +290,7 @@ class World:
         # Angle bin size
         bind = 2.*fov / nbins
 
+        # TODO: fix
         # TODO: find way to display tile information
         # TODO: find way to display end-of-map information
 
@@ -296,10 +301,25 @@ class World:
                 continue
             deltvec = numpy.array([entity.x - x, entity.y - y])
             dist = numpy.linalg.norm(deltvec)
-            angle = numpy.arccos(dirvec.dot(deltvec) / dist) * numpy.sign(perpdirvec.dot(deltvec))
-            if centerd - fov < angle < centerd + fov:
+            normdelt = deltvec/dist
+
+            # angle = numpy.rad2deg(numpy.arccos(dirvec.dot(deltvec) / dist)) * numpy.sign(perpdirvec.dot(deltvec))
+
+            # First get angle from d = 0, then subtract d
+
+            z_angle = numpy.rad2deg(numpy.arccos(normdelt[0]))
+            if normdelt[1]<0:
+                z_angle = -z_angle
+            angle = z_angle - centerd
+
+            while angle > 180:
+                angle -= 360
+            while angle <= -180:
+                angle += 360
+
+            if -fov < angle < fov:
                 # Get bin
-                binn = int((angle - (centerd-fov))/bind)
+                binn = int((angle + fov)/bind)
                 normdist = dist / maxdist
                 last_ndist = bins[binn, 3]
                 if 0 < normdist < last_ndist:

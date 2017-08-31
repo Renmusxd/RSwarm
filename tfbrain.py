@@ -144,6 +144,7 @@ class TFBrain(Brain):
         :param batch: batch size
         :return:
         """
+        print("Buffer size: {}".format(len(self.buffer)))
         training_gen = self.buffer.get_batch_gen(batchsize=batch, niters=int(niters/TFBrain.QCopies))
         for i in range(TFBrain.QCopies):
             self.trainbatch(training_gen)

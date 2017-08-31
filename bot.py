@@ -13,7 +13,7 @@ class Bot:
     NACTIONS = None
 
     VIEW_DIST = 100.0
-    FOV = 90
+    FOV = 90  # Angular distance from center
     VISION_BINS = 5
 
     MAX_AGE = 10000
@@ -176,6 +176,11 @@ class Bot:
         return {k:v for k,v in zip(Bot.INPUTS.keys(),inputs)}
 
     @staticmethod
+    def make_actions_from_label(label):
+        actindx = Bot.ACTIONS.index(label)
+        return max(actindx,0)  # No -1 values
+
+    @staticmethod
     def make_brain(braincons, name):
         """
         Make a brain suitable for this bot
@@ -199,6 +204,7 @@ class Bot:
 
             # Vision
             Bot.VISION = BotVision("gray")
+            #Bot.VISION = BotVision("rgb")
 
             Bot.NINPUTS = len(Bot.INPUTS) + len(Bot.VISION)
         return Bot.NINPUTS
@@ -206,9 +212,8 @@ class Bot:
     @staticmethod
     def GET_NACTIONS():
         if Bot.ACTIONS is None:
-            Bot.ACTIONS = ["still", "left", "lmov", "forward",
-                           "rmov", "right", "sprint", "eat",
-                           "mate", "atck"]
+            Bot.ACTIONS = ["still", "left", "lmov", "forward", "rmov",
+                           "right", "sprint", "eat", "mate", "atck"]
             Bot.NACTIONS = len(Bot.ACTIONS)
         return Bot.NACTIONS
 
@@ -217,7 +222,7 @@ class BotVision:
     GRAY_SIZE = 2
     RGB_SIZE = 4
 
-    def __init__(self,color='gray'):
+    def __init__(self,world,color='gray'):
         """
         Construct vision mechanic
         :param vbins: number of vision bins
@@ -225,6 +230,7 @@ class BotVision:
         :param color: color format to use (gray or rgb)
         """
         self.color = color
+        self.world = world
         if self.color == 'gray':
             self.size = Bot.VISION_BINS * BotVision.GRAY_SIZE
             self.shape = (Bot.VISION_BINS, BotVision.GRAY_SIZE)
@@ -235,11 +241,15 @@ class BotVision:
     def eval(self, bot):
         # Gets back 3 colors + 1 distance
         vision = bot.world.get_vision(bot.x, bot.y, bot.d, Bot.FOV, Bot.VIEW_DIST, Bot.VISION_BINS)
+
         if self.color == "gray":
             # Convert to [-1, 1] scale
             vscale = (-vision[:, 0] + vision[:, 2])
             distances = vision[:, 3]
-            return numpy.concatenate((vscale,distances))
+            new_vision = numpy.ndarray(shape=self.shape)
+            new_vision[:,0] = vscale
+            new_vision[:,1] = distances
+            return new_vision.flatten()
         else:
             return vision.flatten()
 
@@ -251,6 +261,16 @@ class BotVision:
         """
         vis = vision.reshape(self.shape)
         return vis[:,:-1], vis[:,-1]
+
+    def apply_filter(self, colors):
+        return BotVision.filter(colors, self.color)
+
+    @staticmethod
+    def filter(colors,colorfilter):
+        if colorfilter == "gray":
+            return -colors[:,0] + colors[:,2]
+        elif colorfilter == "rgb":
+            return colors
 
     def __len__(self):
         return self.size

@@ -90,11 +90,9 @@ class RewardBuffer:
             self.rewards[:len(subrewards)] = subrewards
             self.nextstates[:len(subnext)] = subnext
             self.size = len(substates)
-            self.head = self.size
+            self.head = self.size-1
             self.dirty = True
             print("Done!")
-
-
 
     def __len__(self):
         return self.size
