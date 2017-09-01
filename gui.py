@@ -94,21 +94,26 @@ class GUI:
         glEnd()
         if self.debug:
             vbins = Bot.VISION_BINS
-            vangle = Bot.FOV / vbins
+            vlow = -Bot.FOV
+            vhigh = Bot.FOV
+            binangle = (vhigh - vlow) / vbins
             vdist = Bot.VIEW_DIST / size
 
             glEnable(GL_BLEND)
             glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA)
-            glColor4f(r,g,b,0.25)
+            glColor4f(r, g, b, 0.25)
             glBegin(GL_TRIANGLES)
             for i in range(vbins):
-                angleindx = i + vbins/2.0
-                lowangle = vangle*angleindx
-                highangle = vangle*(angleindx+1)
-                lowx = vdist * numpy.cos(numpy.deg2rad(lowangle))
-                lowy = vdist * numpy.sin(numpy.deg2rad(lowangle))
-                highx = vdist * numpy.cos(numpy.deg2rad(highangle))
-                highy = vdist * numpy.sin(numpy.deg2rad(highangle))
+                angleindx = i
+                lowangle = binangle*angleindx + vlow
+                highangle = binangle*(angleindx+1) + vlow
+
+                # Add 90.0 since bot-drawings are vertical, not rightwards
+                lowx = vdist * numpy.cos(numpy.deg2rad(lowangle + 90.0))
+                lowy = vdist * numpy.sin(numpy.deg2rad(lowangle + 90.0))
+                highx = vdist * numpy.cos(numpy.deg2rad(highangle + 90.0))
+                highy = vdist * numpy.sin(numpy.deg2rad(highangle + 90.0))
+
                 glVertex2f(0, 0, 0)
                 glVertex2f(lowx, lowy, 0)
                 glVertex2f(highx, highy, 0)

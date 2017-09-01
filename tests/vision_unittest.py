@@ -47,6 +47,46 @@ class VisionTestSuite(unittest.TestCase):
 
             world.reset()
 
+    def test_map_leftedge(self):
+        world = World(ToyBrain, ToyBrain)
+
+        # Face towards wall
+        b = world.make_prey(Bot.VIEW_DIST/2.0, Bot.VIEW_DIST, 180)
+        _, _, distances = Bot.split_senses(b.senses())
+        center_dist = distances[int(len(distances) / 2)]
+
+        self.assertEqual(center_dist,0.5)
+
+    def test_map_rightedge(self):
+        world = World(ToyBrain, ToyBrain)
+
+        # Face towards wall
+        b = world.make_prey(world.width() - Bot.VIEW_DIST/2.0, Bot.VIEW_DIST, 0)
+        _, _, distances = Bot.split_senses(b.senses())
+        center_dist = distances[int(len(distances) / 2)]
+
+        self.assertEqual(center_dist, 0.5)
+
+    def test_map_topedge(self):
+        world = World(ToyBrain, ToyBrain)
+
+        # Face towards wall
+        b = world.make_prey(Bot.VIEW_DIST, world.height() - Bot.VIEW_DIST/2., 90)
+        _, _, distances = Bot.split_senses(b.senses())
+        center_dist = distances[int(len(distances) / 2)]
+
+        self.assertEqual(center_dist,0.5)
+
+    def test_map_botedge(self):
+        world = World(ToyBrain, ToyBrain)
+
+        # Face towards wall
+        b = world.make_prey(Bot.VIEW_DIST, Bot.VIEW_DIST/2.0, 270)
+        _, _, distances = Bot.split_senses(b.senses())
+        center_dist = distances[int(len(distances) / 2)]
+
+        self.assertEqual(center_dist,0.5)
+
 
 def get_pos_d_from(x,y,d,dist):
     dx = numpy.cos(numpy.deg2rad(d)) * dist

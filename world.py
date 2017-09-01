@@ -4,6 +4,7 @@ import random
 from threading import Lock
 import numpy
 import itertools
+import sys
 
 
 class World:
@@ -22,8 +23,9 @@ class World:
     PRED_COLOR = (1., 0., 0.)
     PREY_COLOR = (0., 0., 1.)
 
-    def __init__(self, predbraincls, preybraincls, tileshape=(5,5)):
+    def __init__(self, predbraincls, preybraincls, tileshape=(5,5), restockbots=True):
         self.time = 0
+        self.shouldrestock = restockbots
         self.tileshape = tileshape
         self.tiles = [[(World.MAX_TILE_ENERGY, self.time)
                        for y in range(tileshape[1])]
@@ -41,30 +43,15 @@ class World:
 
     def update(self,dt):
         # Kill
-        predkilllist = []
-        preykilllist = []
-        for entity in self.predentities.values():
-            if entity.dead:
-                predkilllist.append(entity)
-        for entity in self.preyentities.values():
-            if entity.dead:
-                preykilllist.append(entity)
-        self._kill(predkilllist,preykilllist)  # Do any cleanup needed
+        self.cleandead()
 
         entitylists = [self.predentities, self.preyentities]
         entitycolors = [World.PRED_COLOR, World.PREY_COLOR]
         entitygrazes = [False, True]
 
         # Regen population for each entity list if below MIN_BOTS
-        for entitylist, color, can_graze in zip(entitylists, entitycolors, entitygrazes):
-            while len(entitylist) < World.MIN_BOTS:
-                toadd = random.randint(World.MIN_BOT_REGEN,World.MAX_BOT_REGEN)
-                x_center = random.randint(50, World.TILE_SIZE * self.tileshape[0] - 50)
-                y_center = random.randint(50, World.TILE_SIZE * self.tileshape[0] - 50)
-                for i in range(toadd):
-                    xpos = x_center + random.randint(-50, 50)
-                    ypos = y_center + random.randint(-50, 50)
-                    self.make_bot(entitylist, xpos, ypos, random.randint(0, 360), color, can_graze)
+        if self.shouldrestock:
+            self.restock(entitylists, entitycolors, entitygrazes)
 
         # Get sensory data from all entities
         allpredsenses = {entityid: self.predentities[entityid].senses()
@@ -215,6 +202,28 @@ class World:
             print("Resetting world")
             self.reset()
 
+    def cleandead(self):
+        predkilllist = []
+        preykilllist = []
+        for entity in self.predentities.values():
+            if entity.dead:
+                predkilllist.append(entity)
+        for entity in self.preyentities.values():
+            if entity.dead:
+                preykilllist.append(entity)
+        self._kill(predkilllist, preykilllist)  # Do any cleanup needed
+
+    def restock(self,entitylists, entitycolors, entitygrazes):
+        for entitylist, color, can_graze in zip(entitylists, entitycolors, entitygrazes):
+            while len(entitylist) < World.MIN_BOTS:
+                toadd = random.randint(World.MIN_BOT_REGEN, World.MAX_BOT_REGEN)
+                x_center = random.randint(50, self.width() - 50)
+                y_center = random.randint(50, self.height() - 50)
+                for i in range(toadd):
+                    xpos = x_center + random.randint(-50, 50)
+                    ypos = y_center + random.randint(-50, 50)
+                    self.make_bot(entitylist, xpos, ypos, random.randint(0, 360), color, can_graze)
+
     def reset(self):
         self.predentities.clear()
         self.preyentities.clear()
@@ -235,13 +244,15 @@ class World:
     def make_bot(self, entitylist, x, y, d, color, can_graze):
         """
         Make a new bot at a given position
-        :prarm entitylist: list of entities to append to
+        :param entitylist: list of entities to append to
         :param x: x position
         :param y: y position
         :param d: direction (default 0, right)
+        :param color: color of bot
+        :param can_graze: pred or prey boolean
         :return: bot object
         """
-        bot = Bot(x,y,d,self,color,can_graze)
+        bot = Bot(x, y, d, self, color, can_graze)
         entitylist[bot.id] = bot
         return bot
 
@@ -284,7 +295,6 @@ class World:
         # Angle bin size
         bind = 2.*fov / nbins
         # TODO: find way to display tile information
-        # TODO: find way to display end-of-map information
 
         for entity in itertools.chain(self.predentities.values(), self.preyentities.values()):
             # Skip self
@@ -311,7 +321,40 @@ class World:
                     bins[binn, 1] = entity.g
                     bins[binn, 2] = entity.b
                     bins[binn, 3] = normdist
+
+        # Now add end-of-map information
+        vlow = -Bot.FOV
+        vhigh = Bot.FOV
+        binangle = (vhigh - vlow) / Bot.VISION_BINS
+
+        for binn in range(Bot.VISION_BINS):
+            centerangle = binangle * (binn + 0.5) + vlow
+            edgedist = self.disttoedge(x, y, centerangle + centerd) / maxdist
+            if 0.0 < edgedist < bins[binn, 3]:
+                bins[binn, 0:3] = 0
+                bins[binn, 3] = edgedist
         return bins
+
+    def disttoedge(self, x, y, d):
+        rd = numpy.deg2rad(d)
+        dx, dy = numpy.cos(rd), numpy.sin(rd)
+
+        maxx = self.width()
+        maxy = self.height()
+
+        if dx == 0:
+            lefthit, righthit = sys.maxsize, sys.maxsize
+            tophit, bothit = (maxy - y) / dy, (-y) / dy
+        elif dy == 0:
+            lefthit, righthit = (-x) / dx, (maxx - x) / dx
+            tophit, bothit = sys.maxsize, sys.maxsize
+        else:
+            lefthit, righthit = (-x) / dx, (maxx - x) / dx
+            tophit, bothit = (maxy - y) / dy, (-y) / dy
+
+        # Return smallest positive
+        return min(filter(lambda s: s > 0,
+                          [lefthit, righthit, tophit, bothit]))
 
     def eat(self,x,y,toeat):
         if not self.out_of_bounds(x,y):
@@ -332,8 +375,8 @@ class World:
             return 0
 
     def out_of_bounds(self,x,y):
-        inx = 0 <= x < self.tileshape[0] * World.TILE_SIZE
-        iny = 0 <= y < self.tileshape[1] * World.TILE_SIZE
+        inx = 0 <= x < self.width()
+        iny = 0 <= y < self.height()
         return not inx or not iny
 
     def _clear_cache(self):
@@ -346,6 +389,12 @@ class World:
     def cleanup(self):
         self.predbrain.cleanup()
         self.preybrain.cleanup()
+
+    def width(self):
+        return self.tileshape[0] * World.TILE_SIZE
+
+    def height(self):
+        return self.tileshape[1] * World.TILE_SIZE
 
     def get_tile_percs(self):
         with self.lock:

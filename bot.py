@@ -13,7 +13,7 @@ class Bot:
     NACTIONS = None
 
     VIEW_DIST = 100.0
-    FOV = 90  # Angular distance from center
+    FOV = 60  # Angular distance from center
     VISION_BINS = 5
 
     MAX_AGE = 10000
