@@ -5,7 +5,7 @@ import os
 
 
 class TFBrain(Brain):
-    QCopies = 10
+    QCopies = 100
 
     SESS = None
     WRITER = None
@@ -137,7 +137,7 @@ class TFBrain(Brain):
                                 feed_dict={self.state_in: [inputs[entityid] for entityid in ids]})
         return {entityid: act for entityid, act in zip(ids, acts)}
 
-    def train(self, niters=1000, batch=64):
+    def train(self, niters=10000, batch=64):
         """
         Train the brain for a bit based in rewards previously provided
         :param niters: number of training iterations
@@ -148,7 +148,6 @@ class TFBrain(Brain):
         training_gen = self.buffer.get_batch_gen(batchsize=batch, niters=int(niters/TFBrain.QCopies))
         for i in range(TFBrain.QCopies):
             self.trainbatch(training_gen)
-        self.save()
 
     def trainbatch(self, gen):
         # Make dual graph identical to primary
@@ -175,7 +174,7 @@ class TFBrain(Brain):
         """
         Saves variables to directory
         """
-        print("Saving... ", end='')
+        print("Saving {}... ".format(self.name), end='')
         if not os.path.exists(self.directory):
             os.makedirs(self.directory)
         qnetvarvals = TFBrain.SESS.run(self.qnetvars)
@@ -194,7 +193,7 @@ class TFBrain(Brain):
         """
         savename = os.path.join(self.directory, self.name if self.name.endswith('.npz') else self.name+'.npz')
         if os.path.exists(savename):
-            print("Loading brain... ", end='')
+            print("Loading {}... ".format(self.name), end='')
             loaded = numpy.load(savename)
             varinits = loaded['qnet']
             if 'vvar' in loaded:

@@ -93,7 +93,7 @@ class CombinedBrain(Brain):
         else:
             return self.brainB.think(inputs)
 
-    def train(self, iters=1000, batch=64):
+    def train(self, iters=100000, batch=64):
         self.brainA.train(iters, batch)
         self.brainB.train(iters, batch)
 

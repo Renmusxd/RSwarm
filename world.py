@@ -8,7 +8,7 @@ import sys
 
 
 class World:
-    MAX_TILE_ENERGY = 100000  # 1000 seconds at 100fps
+    MAX_TILE_ENERGY = 10000
     TILE_ENERGY_RECHARGE = 1
     TILE_SIZE = 100  # 100 times entity size
     ENTITY_SIZE = 5
@@ -38,8 +38,7 @@ class World:
         self.lock = Lock()
         self.tile_buffer = numpy.ones(tileshape)
         self.entity_buffer = numpy.array([])
-        self.rolling_predreward = 0
-        self.rolling_preyreward = 0
+        self.stats = {}
 
     def update(self,dt):
         # Kill
@@ -107,6 +106,8 @@ class World:
                         predrewards[closest_defender.id] += closest_defender.was_attacked(attacker)
                     elif closest_defender.id in preyrewards:
                         preyrewards[closest_defender.id] += closest_defender.was_attacked(attacker)
+
+                    self.add_to_stat('Attacks',1)
                 else:
                     rewards[attacker.id] += attacker.attack_failed()
 
@@ -144,6 +145,8 @@ class World:
                     # Add rewards and notify
                     rewards[mater_a.id] += mater_a.mate_succeed(closest_mater)
                     rewards[closest_mater.id] += closest_mater.mate_succeed(mater_a)
+
+                    self.add_to_stat("Mates",1)
                 else:
                     rewards[mater_a.id] += mater_a.mate_failed()
 
@@ -159,12 +162,15 @@ class World:
         # Store state, action, reward
         self.predbrain.reward(allpredsenses, allpredactions, predrewards, newpredsenses)
         self.preybrain.reward(allpreysenses, allpreyactions, preyrewards, newpreysenses)
-        self.rolling_predreward += sum(predrewards.values())
-        self.rolling_preyreward += sum(preyrewards.values())
+
+        self.add_to_stat('Predreward',sum(predrewards.values()))
+        self.add_to_stat('Preyreward',sum(preyrewards.values()))
+
         self.time += 1
 
         willtrain = (self.time % World.TRAIN_FREQ) == 0
         willreset = (self.time % World.WORLD_RESET_FREQ) == 0
+
         with self.lock:
             # Check if need to change buffer
             nentities = len(self.predentities) + len(self.preyentities)
@@ -182,13 +188,15 @@ class World:
                     self.tile_buffer[x, y] = self.get_tile_perc(x * World.TILE_SIZE, y * World.TILE_SIZE)
 
         if willtrain:
+            print("Entering training cycle:")
             print("Population:")
             print("\tPred: {}".format(len(self.predentities)))
             print("\tPrey: {}".format(len(self.preyentities)))
-            print("Entering training cycle:")
-            print("\tPred reward: {}".format(self.rolling_predreward))
-            print("\tPrey reward: {}".format(self.rolling_preyreward))
-            self.rolling_predreward, self.rolling_preyreward = 0, 0
+            print("Stats:")
+            for k in sorted(self.stats.keys()):
+                print("\t{}:\t{}".format(k, self.stats[k]))
+            self.clear_stats()
+
             self.predbrain.train()
             self.preybrain.train()
             if len(self.predentities) > 0:
@@ -230,10 +238,12 @@ class World:
         self._clear_cache()
 
     def _kill(self, preds, preys):
+        self.add_to_stat("Deaths",len(preds)+len(preys))
         for entity in preds:
             self.predentities.pop(entity.id)
         for entity in preys:
             self.preyentities.pop(entity.id)
+
 
     def make_pred(self, x, y, d=0.0):
         return self.make_bot(self.predentities, x, y, d, World.PRED_COLOR, False)
@@ -370,6 +380,8 @@ class World:
             # Cannot eat more than exists on tile
             toeat = min(toeat,tileenergy)
             self.tiles[tile_x][tile_y] = (tileenergy - toeat, self.time)
+
+            self.add_to_stat('Eaten', toeat)
             return toeat
         else:
             return 0
@@ -404,6 +416,14 @@ class World:
         with self.lock:
             return self.entity_buffer
 
+    def add_to_stat(self,stat,val):
+        if stat not in self.stats:
+            self.stats[stat] = 0
+        self.stats[stat] += val
+
+    def clear_stats(self):
+        for stat in self.stats:
+            self.stats[stat] = 0
 
 def modrange(x,low,high):
     delt = high - low

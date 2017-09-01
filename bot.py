@@ -16,8 +16,8 @@ class Bot:
     FOV = 60  # Angular distance from center
     VISION_BINS = 5
 
-    MAX_AGE = 10000
-    MATE_TIMER = 100
+    MAX_AGE = 2500
+    MATE_TIMER = 200
 
     MAX_ENERGY = 1000
     MOVE_SPEED = 1.0
@@ -39,10 +39,10 @@ class Bot:
     ATTACK_PREY_PREY_REWARD = -20.
 
     ATTACKED_REWARD = -50.
-    ATTACK_FAILED_REWARD = -5.
+    ATTACK_FAILED_REWARD = -1.0
     EAT_REWARD = 100.  # Scaled by hunger: R (E - e) / E
     MATE_REWARD = 100.
-    FAILED_MATE_REWARD = -10.
+    FAILED_MATE_REWARD = -1.0
 
     def __init__(self, x, y, d, world, color, can_graze, energy=MAX_ENERGY):
         """
@@ -146,11 +146,13 @@ class Bot:
         :return: Reward
         """
         self.attacking = False
+        dam = 0.9*Bot.MAX_ENERGY
         if self.can_graze:
+            other.energy -= dam
             return Bot.ATTACK_PREY_PREY_REWARD if other.can_graze else Bot.ATTACK_PREY_PRED_REWARD
         else:
-            self.energy += 10*Bot.MAX_ENERGY/2
-            other.energy -= Bot.MAX_ENERGY/2
+            self.energy += 10*dam
+            other.energy -= dam
             return Bot.ATTACK_PRED_PREY_REWARD if other.can_graze else Bot.ATTACK_PRED_PRED_REWARD
 
     def attack_failed(self):
