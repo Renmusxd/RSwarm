@@ -127,6 +127,7 @@ class GUI:
     def set_zoom(self, dz):
         self.dz = dz
 
+
 running = True
 
 
@@ -136,19 +137,23 @@ def update(world, iters=0):
         world.update(1)
         iternum += 1
 
+
 def make_brain_constructor(predprey):
     """
-
     :param predprey: string "pred" or string "prey"
     :return:
     """
-    constructor = CombinedBrain.make_combined_constructor(TFBrain,ToyBrain,0.9)
-    #constructor = PredHeuristicBrain if predprey=='pred' else PreyHeuristicBrain
+    if predprey == 'pred':
+        constructor = CombinedBrain.make_combined_constructor(TFBrain,ToyBrain,0.9)
+    else:
+        constructor = CombinedBrain.make_combined_constructor(PreyHeuristicBrain,ToyBrain,0.9)
     return constructor
+
 
 def make_model():
     world = World(make_brain_constructor('pred'), make_brain_constructor('prey'))
     return world
+
 
 # Python multithreading slows stuff down
 SINGLE_THREAD = True
@@ -160,7 +165,7 @@ if __name__ == "__main__":
         world.startup()
         world.update(1)
 
-        win = pyglet.window.Window(750, 750)
+        win = pyglet.window.Window(1750, 1750)
         fps_display = pyglet.clock.ClockDisplay(format='%(fps).2f fps')
         gui = GUI(world, win.width, win.height)
 

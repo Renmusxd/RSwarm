@@ -5,8 +5,8 @@ import sys
 
 class PredHeuristicBrain(Brain):
 
-    def __init__(self, name, ninputs, nactions):
-        super().__init__(name, ninputs, nactions)
+    def __init__(self, name, ninputs, nactions, **kwargs):
+        super().__init__(name, ninputs, nactions, **kwargs)
 
     def think(self, inputs):
         return {bid: Bot.make_actions_from_label(self.think_indiv(inputs[bid]))
@@ -34,8 +34,8 @@ class PredHeuristicBrain(Brain):
 
 class PreyHeuristicBrain(Brain):
 
-    def __init__(self, name, ninputs, nactions):
-        super().__init__(name, ninputs, nactions)
+    def __init__(self, name, ninputs, nactions, **kwargs):
+        super().__init__(name, ninputs, nactions, **kwargs)
 
     def think(self, inputs):
         return {bid: Bot.make_actions_from_label(self.think_indiv(inputs[bid]))
@@ -51,14 +51,17 @@ class PreyHeuristicBrain(Brain):
             return 'eat'
         if linputs['tile'] < 0.75:
             return 'forward'
-        if linputs['mate'] == 1.0:
-            middleindx = int(len(vision)/2.0)
-            if vision[middleindx] == 1.0:
-                return 'forward'
+        # if linputs['mate'] == 1.0:
+        #     middleindx = int(len(vision)/2.0)
+        #     if vision[middleindx] == 1.0:
+        #         return 'forward'
+        #     return 'rmov'
+        if sum(vision[0]) == 0 and distance[0] < 1.0:
             return 'rmov'
-
+        if sum(vision[-1]) == 0 and distance[-1] < 1.0:
+            return 'lmov'
         # Other things
-        return 'still'
+        return 'forward'
 
     def train(self, iters=1000, batch=64):
         pass

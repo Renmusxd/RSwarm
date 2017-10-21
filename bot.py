@@ -39,7 +39,7 @@ class Bot:
     ATTACK_PREY_PREY_REWARD = -20.
 
     ATTACKED_REWARD = -50.
-    ATTACK_FAILED_REWARD = -1.0
+    ATTACK_FAILED_REWARD = -0.0
     EAT_REWARD = 100.  # Scaled by hunger: R (E - e) / E
     MATE_REWARD = 100.
     FAILED_MATE_REWARD = -1.0
@@ -88,7 +88,7 @@ class Bot:
         if eat:
             if self.can_graze:
                 toeat = min(Bot.EAT_AMOUNT, Bot.MAX_ENERGY - self.energy)
-                eaten = self.world.eat(self.x,self.y,toeat)
+                eaten = self.world.eat(self.x, self.y, toeat)
                 self.energy += eaten
                 # reward_acc += eaten/Bot.EAT_AMOUNT * (Bot.MAX_ENERGY - self.energy)/Bot.MAX_ENERGY * Bot.EAT_REWARD
                 reward_acc += eaten * Bot.EAT_REWARD * (Bot.MAX_ENERGY - self.energy)/(Bot.EAT_AMOUNT * Bot.MAX_ENERGY)
