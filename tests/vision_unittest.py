@@ -88,10 +88,11 @@ class VisionTestSuite(unittest.TestCase):
         self.assertEqual(center_dist,0.5)
 
 
-def get_pos_d_from(x,y,d,dist):
+def get_pos_d_from(x, y, d, dist):
     dx = numpy.cos(numpy.deg2rad(d)) * dist
     dy = numpy.sin(numpy.deg2rad(d)) * dist
     return x + dx, y + dy
+
 
 if __name__ == '__main__':
     unittest.main()

@@ -9,5 +9,6 @@ def main():
 
     print(model.predbrain.think_indiv(a.senses()))
 
+
 if __name__ == "__main__":
     main()
