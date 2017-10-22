@@ -29,7 +29,7 @@ class Brain(metaclass=ABCMeta):
         raise NotImplementedError
 
     @abstractmethod
-    def train(self, iters=1000, batch=64):
+    def train(self, iters=1000000, batch=64, totreward=None):
         """
         Train the brain for a bit based in rewards previously provided
         :param iters:
@@ -70,10 +70,11 @@ class ToyBrain(Brain):
                          directory=directory, rewardbuffer=rewardbuffer)
 
     def think(self, inputs):
+        print("ERROR")
         return {entityid: random.randint(0, self.nactions - 1)
                 for entityid in inputs.keys()}
 
-    def train(self, iters=1000, batch=64):
+    def train(self, iters=1000000, batch=64, totreward=None):
         pass
 
 
@@ -93,9 +94,9 @@ class CombinedBrain(Brain):
         else:
             return self.brainB.think(inputs)
 
-    def train(self, iters=100000, batch=64):
-        self.brainA.train(iters, batch)
-        self.brainB.train(iters, batch)
+    def train(self, iters=1000000, batch=64, totreward=None):
+        self.brainA.train(iters=iters, batch=batch, totreward=totreward)
+        self.brainB.train(iters=iters, batch=batch, totreward=totreward)
 
     def startup(self):
         super().startup()

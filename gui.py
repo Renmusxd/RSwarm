@@ -1,7 +1,4 @@
-from world import World
-from brain import ToyBrain, CombinedBrain
-from heuristics import PredHeuristicBrain, PreyHeuristicBrain
-from tfbrain import TFBrain
+from world import *
 from bot import Bot
 
 import pyglet
@@ -128,38 +125,10 @@ class GUI:
         self.dz = dz
 
 
-running = True
-
-
-def update(world, iters=0):
-    iternum = 1
-    while iternum != iters and running:
-        world.update(1)
-        iternum += 1
-
-
-def make_brain_constructor(predprey):
-    """
-    :param predprey: string "pred" or string "prey"
-    :return:
-    """
-    if predprey == 'pred':
-        constructor = CombinedBrain.make_combined_constructor(TFBrain,ToyBrain,0.9)
-    else:
-        constructor = CombinedBrain.make_combined_constructor(PreyHeuristicBrain,ToyBrain,0.9)
-    return constructor
-
-
-def make_model():
-    world = World(make_brain_constructor('pred'), make_brain_constructor('prey'))
-    return world
-
-
-# Python multithreading slows stuff down
+# Python multithreading slows stuff down, probably mutex starving. Will swap to RLmutex
 SINGLE_THREAD = True
 
 if __name__ == "__main__":
-
     world = make_model()
     try:
         world.startup()
@@ -185,13 +154,13 @@ if __name__ == "__main__":
         @win.event
         def on_key_press(symbol, modifiers):
             if symbol == pyglet.window.key.LEFT:
-                gui.add_translate(-GUI.SCROLL_SPEED,0)
+                gui.add_translate(-GUI.SCROLL_SPEED, 0)
             elif symbol == pyglet.window.key.RIGHT:
                 gui.add_translate(GUI.SCROLL_SPEED, 0)
             elif symbol == pyglet.window.key.UP:
-                gui.add_translate(0,GUI.SCROLL_SPEED)
+                gui.add_translate(0, GUI.SCROLL_SPEED)
             elif symbol == pyglet.window.key.DOWN:
-                gui.add_translate(0,-GUI.SCROLL_SPEED)
+                gui.add_translate(0, -GUI.SCROLL_SPEED)
             elif symbol == pyglet.window.key.Q:
                 gui.set_zoom(1. / GUI.ZOOM_SPEED)
             elif symbol == pyglet.window.key.E:

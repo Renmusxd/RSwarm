@@ -1,6 +1,8 @@
 from bot import Bot
 import random
-
+from brain import *
+from tfbrain import *
+from heuristics import *
 from threading import Lock
 import numpy
 import itertools
@@ -195,16 +197,20 @@ class World:
             print("Stats:")
             for k in sorted(self.stats.keys()):
                 print("\t{}:\t{}".format(k, self.stats[k]))
-            self.clear_stats()
 
-            self.predbrain.train()
-            self.preybrain.train()
+            self.predbrain.train(totreward=self.stats['Predreward'])
+            self.preybrain.train(totreward=self.stats['Preyreward'])
+            # self.predbrain.save()
+            # self.preybrain.save()
+
             if len(self.predentities) > 0:
                 randomentity = random.choice(list(self.predentities.values()))
                 self.predbrain.print_diag(randomentity.senses())
             if len(self.predentities) > 0:
                 randomentity = random.choice(list(self.preyentities.values()))
                 self.preybrain.print_diag(randomentity.senses())
+
+            self.clear_stats()
 
         if willreset:
             print("Resetting world")
@@ -243,7 +249,6 @@ class World:
             self.predentities.pop(entity.id)
         for entity in preys:
             self.preyentities.pop(entity.id)
-
 
     def make_pred(self, x, y, d=0.0):
         return self.make_bot(self.predentities, x, y, d, World.PRED_COLOR, False)
@@ -363,8 +368,11 @@ class World:
             tophit, bothit = (maxy - y) / dy, (-y) / dy
 
         # Return smallest positive
-        return min(filter(lambda s: s > 0,
-                          [lefthit, righthit, tophit, bothit]))
+        dists = list(filter(lambda s: s > 0, [lefthit, righthit, tophit, bothit]))
+        if len(dists) == 0:
+            return 0
+        else:
+            return min(dists)
 
     def eat(self,x,y,toeat):
         if not self.out_of_bounds(x,y):
@@ -425,6 +433,7 @@ class World:
         for stat in self.stats:
             self.stats[stat] = 0
 
+
 def modrange(x,low,high):
     delt = high - low
     while x < low:
@@ -432,3 +441,28 @@ def modrange(x,low,high):
     while x > high:
         x -= delt
     return x
+
+
+def update(world, iters=0):
+    iternum = 1
+    while iternum != iters:
+        world.update(1)
+        iternum += 1
+
+
+def make_brain_constructor(predprey):
+    """
+    :param predprey: string "pred" or string "prey"
+    :return:
+    """
+    if predprey == 'pred':
+        constructor = CombinedBrain.make_combined_constructor(TFBrain, ToyBrain, 1.0)
+        # constructor = TFBrain
+    else:
+        constructor = PreyHeuristicBrain
+    return constructor
+
+
+def make_model():
+    world = World(make_brain_constructor('pred'), make_brain_constructor('prey'))
+    return world

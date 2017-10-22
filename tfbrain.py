@@ -5,7 +5,7 @@ import os
 
 
 class TFBrain(Brain):
-    QCopies = 100
+    QCopies = 10000
 
     SESS = None
     WRITER = None
@@ -31,17 +31,25 @@ class TFBrain(Brain):
         with tf.name_scope(name):
             mainshape = [ninputs]+hshapes+[nactions]
 
+            self.global_step = tf.Variable(0, name='global_step', trainable=False)
+
             # Make some models with input/output variables
             self.state_in, self.Qout, self.qnetvars = self.makeqnetwork(mainshape)
             self.next_state, self.dualQout, self.dualnetvars = self.makeqnetwork(mainshape)
-
 
             # Copy each var to dual
             self.copy_to_dual = [tf.assign(dualnetvar, qnetvar) for qnetvar, dualnetvar in
                                  zip(self.qnetvars, self.dualnetvars)]
 
+            # Q probs
+            self.qprobs = tf.nn.softmax(self.Qout, 1)
+            # Take random sample from each and put into array
+            self.chosen_actions = tf.reshape(tf.multinomial(tf.log(self.qprobs), 1), [-1])
+
+            # If we want just the highest Q value do the following
+            # self.chosen_actions = tf.argmax(self.Qout, 1)
+
             # Then combine them together to get our final Q-values.
-            self.chosen_actions = tf.argmax(self.Qout, 1)
             self.chosen_Q = tf.reduce_sum(tf.multiply(self.Qout,
                                                       tf.one_hot(self.chosen_actions, nactions, dtype=tf.float32)),
                                           axis=1)
@@ -62,9 +70,15 @@ class TFBrain(Brain):
             self.td_error = tf.square(self.targetQ - self.Q)
             self.loss = tf.reduce_mean(self.td_error)
             self.trainer = tf.train.AdamOptimizer(learning_rate=0.0005)
-            self.updateModel = self.trainer.minimize(self.loss)
+            self.updateModel = self.trainer.minimize(self.loss, global_step=self.global_step)
 
             self.saver = tf.train.Saver()
+            with tf.name_scope('summary'):
+                self.losssum = tf.summary.scalar('loss', self.loss)
+
+                self.rewardsumvar = tf.placeholder(shape=(), name="episode_reward", dtype=tf.float32)
+                self.rewardsum = tf.summary.scalar('reward', self.rewardsumvar)
+
 
     def makeqnetwork(self, shape):
         """
@@ -97,14 +111,18 @@ class TFBrain(Brain):
         return state_in, layer, variables
 
     def get_checkpoint(self):
-        return os.path.join(self.directory, self.name if self.name.endswith('.ckpt') else self.name + '.ckpt')
+        return os.path.join(self.directory, self.name)
 
     def has_checkpoint(self):
-        return os.path.exists(self.get_checkpoint())
+        return tf.train.checkpoint_exists(self.get_checkpoint())
 
     def loadcheckpoint(self):
         if self.has_checkpoint():
+            print("Loading checkpoint... ",end="")
             self.saver.restore(TFBrain.SESS, self.get_checkpoint())
+            print("Done!")
+        else:
+            print("No checkpoint found")
 
     def think(self, inputs):
         ids = list(inputs.keys())
@@ -112,15 +130,19 @@ class TFBrain(Brain):
                                 feed_dict={self.state_in: [inputs[entityid] for entityid in ids]})
         return {entityid: act for entityid, act in zip(ids, acts)}
 
-    def train(self, niters=1000, batch=64):
+    def train(self, iters=1000000, batch=64, totreward=None):
         """
         Train the brain for a bit based in rewards previously provided
         :param niters: number of training iterations
         :param batch: batch size
         :return:
         """
+        if totreward is not None:
+            rewardsum, global_step = TFBrain.SESS.run([self.rewardsum, self.global_step], feed_dict={self.rewardsumvar: totreward})
+            TFBrain.WRITER.add_summary(rewardsum, global_step)
+
         print("Buffer size: {}".format(len(self.buffer)))
-        training_gen = self.buffer.get_batch_gen(batchsize=batch, niters=int(niters/TFBrain.QCopies))
+        training_gen = self.buffer.get_batch_gen(batchsize=batch, niters=int(iters/TFBrain.QCopies))
         for i in range(TFBrain.QCopies):
             self.trainbatch(training_gen)
 
@@ -134,7 +156,8 @@ class TFBrain(Brain):
                          self.rewards: rewards,
                          self.actions: actions,
                          self.next_state: newinputs}
-            _ = TFBrain.SESS.run([self.updateModel], feed_dict=feed_dict)
+            _, summary, global_step = TFBrain.SESS.run([self.updateModel, self.losssum, self.global_step], feed_dict=feed_dict)
+            TFBrain.WRITER.add_summary(summary, global_step)
 
     def startup(self):
         super().startup()
@@ -155,7 +178,7 @@ class TFBrain(Brain):
         print("Saving {}... ".format(self.name), end='')
         if not os.path.exists(self.directory):
             os.makedirs(self.directory)
-        self.saver.save(TFBrain.SESS, os.path.join(self.directory,self.name+'ckpt'))
+        self.saver.save(TFBrain.SESS, self.get_checkpoint())
         print("Done!")
 
     def cleanup(self):

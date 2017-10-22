@@ -28,7 +28,7 @@ class PredHeuristicBrain(Brain):
         # Order indexes by distance
         return 'still'
 
-    def train(self, iters=1000, batch=64):
+    def train(self, iters=1000, batch=64, **kwargs):
         pass
 
 
@@ -51,11 +51,6 @@ class PreyHeuristicBrain(Brain):
             return 'eat'
         if linputs['tile'] < 0.75:
             return 'forward'
-        # if linputs['mate'] == 1.0:
-        #     middleindx = int(len(vision)/2.0)
-        #     if vision[middleindx] == 1.0:
-        #         return 'forward'
-        #     return 'rmov'
         if sum(vision[0]) == 0 and distance[0] < 1.0:
             return 'rmov'
         if sum(vision[-1]) == 0 and distance[-1] < 1.0:
@@ -63,7 +58,7 @@ class PreyHeuristicBrain(Brain):
         # Other things
         return 'forward'
 
-    def train(self, iters=1000, batch=64):
+    def train(self, iters=1000, batch=64, **kwargs):
         pass
 
 

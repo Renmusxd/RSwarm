@@ -1,20 +1,6 @@
-from world import World
-from brain import ToyBrain, CombinedBrain
-from tfbrain import TFBrain
+from world import *
 
-
-def make_brain_constructor(predprey):
-    """
-
-    :param predprey: string "pred" or string "prey"
-    :return:
-    """
-    constructor = CombinedBrain.make_combined_constructor(TFBrain,ToyBrain,0.9)
-    return constructor
-
-def make_model():
-    world = World(make_brain_constructor('pred'), make_brain_constructor('prey'))
-    return world
+running = True
 
 
 if __name__ == "__main__":
