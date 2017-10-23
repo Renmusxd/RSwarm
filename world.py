@@ -19,7 +19,7 @@ class World:
     MIN_BOT_REGEN = 2
     MAX_BOT_REGEN = 5
 
-    TRAIN_FREQ = 100
+    TRAIN_FREQ = 500
     WORLD_RESET_FREQ = 5000
 
     PRED_COLOR = (1., 0., 0.)
@@ -40,9 +40,15 @@ class World:
         self.lock = Lock()
         self.tile_buffer = numpy.ones(tileshape)
         self.entity_buffer = numpy.array([])
+        self.focus_senses = None
+        self.focus_actvals = None
         self.stats = {}
 
-    def update(self,dt):
+    def update(self, dt, focusid=None):
+        """
+        A giant ugly update function for game logic. Will clean up later
+        :param dt: dt passed by opengl if desired
+        """
         # Kill
         self.cleandead()
 
@@ -66,6 +72,16 @@ class World:
         allpreyactions = self.preybrain.think(allpreysenses)
         entityactions = [allpredactions, allpreyactions]
 
+        if focusid in self.predentities:
+            focussenses = allpredsenses[focusid]
+            focusactions = self.predbrain.debug(focussenses)
+        elif focusid in self.preyentities:
+            focussenses = allpreysenses[focusid]
+            focusactions = self.preybrain.debug(focussenses)
+        else:
+            focussenses = None
+            focusactions = None
+
         # Apply actions
         predrewards = {entityid: self.predentities[entityid].act(allpredactions[entityid])
                        for entityid in allpredactions.keys()}
@@ -77,6 +93,8 @@ class World:
         for entitylist, rewards in zip(entitylists, entityrewards):
             attackers = list(filter(lambda b: b.attacking, entitylist.values()))
             max_d2 = Bot.ACTION_RADIUS ** 2
+            #TODO review attack code to make sure none of those annoying vision bugs are here
+            # I'm pretty sure I've seen some BS
             for attacker in attackers:
                 closest_defender = None
                 closest_distance2 = max_d2
@@ -159,8 +177,6 @@ class World:
                          for entityid in self.preyentities.keys()}
         newentitysenses = [newpredsenses, newpreysenses]
 
-        self._clear_cache()
-
         # Store state, action, reward
         self.predbrain.reward(allpredsenses, allpredactions, predrewards, newpredsenses)
         self.preybrain.reward(allpreysenses, allpreyactions, preyrewards, newpreysenses)
@@ -173,33 +189,14 @@ class World:
         willtrain = (self.time % World.TRAIN_FREQ) == 0
         willreset = (self.time % World.WORLD_RESET_FREQ) == 0
 
-        with self.lock:
-            # Check if need to change buffer
-            nentities = len(self.predentities) + len(self.preyentities)
-            if nentities != len(self.entity_buffer):
-                self.entity_buffer = numpy.zeros((nentities, 3 + 3))
-            for i,entity in enumerate(itertools.chain(self.predentities.values(),self.preyentities.values())):
-                self.entity_buffer[i, 0] = entity.x
-                self.entity_buffer[i, 1] = entity.y
-                self.entity_buffer[i, 2] = entity.d
-                self.entity_buffer[i, 3] = entity.r
-                self.entity_buffer[i, 4] = entity.g
-                self.entity_buffer[i, 5] = entity.b
-            for x in range(self.tileshape[0]):
-                for y in range(self.tileshape[1]):
-                    self.tile_buffer[x, y] = self.get_tile_perc(x * World.TILE_SIZE, y * World.TILE_SIZE)
+        # Push all to buffer, push focus if available
+        self.pushtobuffer(focussenses, focusactions)
 
         if willtrain:
-            print("Entering training cycle:")
-            print("Population:")
-            print("\tPred: {}".format(len(self.predentities)))
-            print("\tPrey: {}".format(len(self.preyentities)))
-            print("Stats:")
-            for k in sorted(self.stats.keys()):
-                print("\t{}:\t{}".format(k, self.stats[k]))
+            self.printdebug()
 
-            self.predbrain.train(totreward=self.stats['Predreward'])
-            self.preybrain.train(totreward=self.stats['Preyreward'])
+            self.predbrain.train(Brain.DEFAULTITERS, Brain.DEFAULTBATCH, totreward=self.stats['Predreward'])
+            self.preybrain.train(Brain.DEFAULTITERS, Brain.DEFAULTBATCH, totreward=self.stats['Preyreward'])
             # self.predbrain.save()
             # self.preybrain.save()
 
@@ -212,9 +209,45 @@ class World:
 
             self.clear_stats()
 
+            print("Done Training")
+
         if willreset:
             print("Resetting world")
             self.reset()
+
+        self._clear_cache()
+
+    def pushtobuffer(self, focussenses, focusactions):
+        with self.lock:
+            # Check if need to change buffer
+            nentities = len(self.predentities) + len(self.preyentities)
+            if nentities != len(self.entity_buffer):
+                self.entity_buffer = numpy.zeros((nentities, 2 + 3 + 3))
+
+            for i, entity in enumerate(itertools.chain(self.predentities.values(), self.preyentities.values())):
+                self.entity_buffer[i, :] = [entity.id, int(entity.can_graze),
+                                            entity.x, entity.y, entity.d,
+                                            entity.r, entity.g, entity.b]
+
+            for x in range(self.tileshape[0]):
+                for y in range(self.tileshape[1]):
+                    self.tile_buffer[x, y] = self.get_tile_perc(x * World.TILE_SIZE, y * World.TILE_SIZE)
+
+            if focussenses is not None and focusactions is not None:
+                self.focus_senses = focussenses
+                self.focus_actvals = focusactions
+            else:
+                self.focus_senses = None
+                self.focus_actvals = None
+
+    def printdebug(self):
+        print("Entering training cycle:")
+        print("Population:")
+        print("\tPred: {}".format(len(self.predentities)))
+        print("\tPrey: {}".format(len(self.preyentities)))
+        print("Stats:")
+        for k in sorted(self.stats.keys()):
+            print("\t{}:\t{}".format(k, self.stats[k]))
 
     def cleandead(self):
         predkilllist = []
@@ -244,7 +277,7 @@ class World:
         self._clear_cache()
 
     def _kill(self, preds, preys):
-        self.add_to_stat("Deaths",len(preds)+len(preys))
+        self.add_to_stat("Deaths", len(preds)+len(preys))
         for entity in preds:
             self.predentities.pop(entity.id)
         for entity in preys:
@@ -309,7 +342,6 @@ class World:
 
         # Angle bin size
         bind = 2.*fov / nbins
-        # TODO: find way to display tile information
 
         for entity in itertools.chain(self.predentities.values(), self.preyentities.values()):
             # Skip self
@@ -418,11 +450,13 @@ class World:
 
     def get_tile_percs(self):
         with self.lock:
-            return self.tile_buffer
+            return self.tile_buffer[:]
 
     def get_bot_values(self):
         with self.lock:
-            return self.entity_buffer
+            focussensecopy = self.focus_senses[:] if self.focus_senses is not None else None
+            focusactcopy = self.focus_actvals[:] if self.focus_actvals is not None else None
+            return self.entity_buffer[:], focussensecopy, focusactcopy
 
     def add_to_stat(self,stat,val):
         if stat not in self.stats:
@@ -443,10 +477,10 @@ def modrange(x,low,high):
     return x
 
 
-def update(world, iters=0):
+def update(world, iters=0, getfocus=lambda: None):
     iternum = 1
     while iternum != iters:
-        world.update(1)
+        world.update(1, focusid=getfocus())
         iternum += 1
 
 
@@ -456,10 +490,12 @@ def make_brain_constructor(predprey):
     :return:
     """
     if predprey == 'pred':
-        constructor = CombinedBrain.make_combined_constructor(TFBrain, ToyBrain, 1.0)
+        constructor = CombinedBrain.make_combined_constructor(TFBrain, ToyBrain, 0.95)
         # constructor = TFBrain
+        #constructor = ToyBrain
     else:
         constructor = PreyHeuristicBrain
+        #constructor = CombinedBrain.make_combined_constructor(TFBrain, ToyBrain, 0.95)
     return constructor
 
 

@@ -16,7 +16,6 @@ class Bot:
     FOV = 60  # Angular distance from center
     VISION_BINS = 5
 
-    MAX_AGE = 2500
     MATE_TIMER = 200
 
     MAX_ENERGY = 1000
@@ -25,7 +24,7 @@ class Bot:
     TURN_SPEED = 5.0
 
     # Radius for actions like attacking and mating
-    ACTION_RADIUS = 10
+    ACTION_RADIUS = 20
 
     EAT_AMOUNT = 20
 
@@ -65,7 +64,6 @@ class Bot:
         # Indicate that this Bot is attempting to mate
         self.mating = False
         self.attacking = False
-        self.age = 0
         self.mate_timer = 0
 
     def senses(self):
@@ -115,13 +113,12 @@ class Bot:
                 self.y += Bot.MOVE_SPEED * numpy.sin(numpy.deg2rad(self.d))
             self.energy -= 1
 
-        self.age += 1
         self.mate_timer += 1
 
         self.mate_timer = min(self.mate_timer, Bot.MATE_TIMER)
 
         # Punish death
-        if self.energy <= 0 or self.world.out_of_bounds(self.x,self.y) or self.age >= Bot.MAX_AGE:
+        if self.energy <= 0 or self.world.out_of_bounds(self.x,self.y):
             reward_acc += self.DEATH_REWARD
             self.dead = True
         return reward_acc
@@ -146,7 +143,7 @@ class Bot:
         :return: Reward
         """
         self.attacking = False
-        dam = 0.9*Bot.MAX_ENERGY
+        dam = other.energy
         if self.can_graze:
             other.energy -= dam
             return Bot.ATTACK_PREY_PREY_REWARD if other.can_graze else Bot.ATTACK_PREY_PRED_REWARD
@@ -178,6 +175,17 @@ class Bot:
         return {k:v for k,v in zip(Bot.INPUTS.keys(),inputs)}
 
     @staticmethod
+    def label_actions(actions):
+        return {k:v for k,v in zip(Bot.ACTIONS,actions)}
+
+    @staticmethod
+    def action_label(action):
+        if 0 <= action < len(Bot.ACTIONS):
+            return Bot.ACTIONS[action]
+        else:
+            return None
+
+    @staticmethod
     def make_actions_from_label(label):
         actindx = Bot.ACTIONS.index(label)
         return max(actindx,0)  # No -1 values
@@ -199,8 +207,7 @@ class Bot:
             Bot.INPUTS = OrderedDict()
 
             # Basic senses
-            Bot.INPUTS['energy'] = lambda b: b.energy / Bot.MAX_ENERGY
-            Bot.INPUTS['age'] = lambda b: b.age / Bot.MAX_AGE
+            Bot.INPUTS['energy'] = lambda b: min(b.energy / Bot.MAX_ENERGY, 1.0)
             Bot.INPUTS['mate'] = lambda b: b.mate_timer / Bot.MATE_TIMER
             Bot.INPUTS['tile'] = lambda b: b.world.get_tile_perc(b.x,b.y)
 

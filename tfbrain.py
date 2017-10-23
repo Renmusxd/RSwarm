@@ -1,11 +1,12 @@
 from brain import Brain, ToyBrain
 import tensorflow as tf
+from bot import Bot
 import numpy
 import os
 
 
 class TFBrain(Brain):
-    QCopies = 10000
+    DUALCOPYFREQ = 50
 
     SESS = None
     WRITER = None
@@ -14,7 +15,7 @@ class TFBrain(Brain):
 
     # https://stats.stackexchange.com/questions/200006/q-learning-with-neural-network-as-function-approximation/200146
     # https://stats.stackexchange.com/questions/126994/questions-about-q-learning-using-neural-networks
-    def __init__(self, name, ninputs, nactions, hshapes=list((25,5)), gamma=0.99, directory="save", rewardbuffer=None):
+    def __init__(self, name, ninputs, nactions, hshapes=list((15,15)), gamma=0.99, directory="save", rewardbuffer=None):
         # Make a single session if not inherited
         super().__init__(name, ninputs, nactions,
                          directory=directory, rewardbuffer=rewardbuffer)
@@ -79,7 +80,6 @@ class TFBrain(Brain):
                 self.rewardsumvar = tf.placeholder(shape=(), name="episode_reward", dtype=tf.float32)
                 self.rewardsum = tf.summary.scalar('reward', self.rewardsumvar)
 
-
     def makeqnetwork(self, shape):
         """
         Construct graph
@@ -130,7 +130,11 @@ class TFBrain(Brain):
                                 feed_dict={self.state_in: [inputs[entityid] for entityid in ids]})
         return {entityid: act for entityid, act in zip(ids, acts)}
 
-    def train(self, iters=1000000, batch=64, totreward=None):
+    def debug(self,debuginput):
+        actprobs = TFBrain.SESS.run(self.qprobs, feed_dict={self.state_in: [debuginput]})
+        return actprobs[0]
+
+    def train(self, iters, batch, totreward=None):
         """
         Train the brain for a bit based in rewards previously provided
         :param niters: number of training iterations
@@ -138,12 +142,13 @@ class TFBrain(Brain):
         :return:
         """
         if totreward is not None:
-            rewardsum, global_step = TFBrain.SESS.run([self.rewardsum, self.global_step], feed_dict={self.rewardsumvar: totreward})
+            rewardsum, global_step = TFBrain.SESS.run([self.rewardsum, self.global_step],
+                                                      feed_dict={self.rewardsumvar: totreward})
             TFBrain.WRITER.add_summary(rewardsum, global_step)
 
         print("Buffer size: {}".format(len(self.buffer)))
-        training_gen = self.buffer.get_batch_gen(batchsize=batch, niters=int(iters/TFBrain.QCopies))
-        for i in range(TFBrain.QCopies):
+        training_gen = self.buffer.get_batch_gen(batchsize=batch, niters=int(TFBrain.DUALCOPYFREQ))
+        for i in range(int(iters/TFBrain.DUALCOPYFREQ)):
             self.trainbatch(training_gen)
 
     def trainbatch(self, gen):
@@ -156,7 +161,8 @@ class TFBrain(Brain):
                          self.rewards: rewards,
                          self.actions: actions,
                          self.next_state: newinputs}
-            _, summary, global_step = TFBrain.SESS.run([self.updateModel, self.losssum, self.global_step], feed_dict=feed_dict)
+            _, summary, global_step = TFBrain.SESS.run([self.updateModel, self.losssum, self.global_step],
+                                                       feed_dict=feed_dict)
             TFBrain.WRITER.add_summary(summary, global_step)
 
     def startup(self):
@@ -193,8 +199,11 @@ class TFBrain(Brain):
         qout, dualqout = TFBrain.SESS.run([self.Qout, self.dualQout],
                                           feed_dict={self.state_in: [sample_in],
                                                      self.next_state: [sample_in]})
+
         print("In:   ", formatarray(sample_in))
-        print("Q:    ", formatarray(qout[0]))
+
+        for q, a in zip(qout[0], Bot.ACTIONS):
+            print("\t{}:\t{:5.5f}".format(a,q))
 
 
 def formatarray(array):

@@ -28,7 +28,7 @@ class PredHeuristicBrain(Brain):
         # Order indexes by distance
         return 'still'
 
-    def train(self, iters=1000, batch=64, **kwargs):
+    def train(self, iters, batch, **kwargs):
         pass
 
 
@@ -58,7 +58,7 @@ class PreyHeuristicBrain(Brain):
         # Other things
         return 'forward'
 
-    def train(self, iters=1000, batch=64, **kwargs):
+    def train(self, iters, batch, **kwargs):
         pass
 
 

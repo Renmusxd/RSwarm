@@ -1,10 +1,13 @@
-from rewardbuffer import RewardBuffer
+from rewardbuffer import *
 
 from abc import ABCMeta, abstractmethod
 import random
 
 
 class Brain(metaclass=ABCMeta):
+    DEFAULTBATCH = 64
+    DEFAULTITERS = 1000000
+
     def __init__(self, name, ninputs, nactions, directory='save', rewardbuffer=None):
         """
         Construct a new brain
@@ -29,7 +32,7 @@ class Brain(metaclass=ABCMeta):
         raise NotImplementedError
 
     @abstractmethod
-    def train(self, iters=1000000, batch=64, totreward=None):
+    def train(self, iters, batch, totreward=None):
         """
         Train the brain for a bit based in rewards previously provided
         :param iters:
@@ -63,6 +66,9 @@ class Brain(metaclass=ABCMeta):
         """
         self.buffer.reward(inputs, actions, rewards, newinputs)
 
+    def debug(self,debuginput):
+        return None
+
 
 class ToyBrain(Brain):
     def __init__(self, name, ninputs, nactions, directory='save', rewardbuffer=None):
@@ -70,12 +76,14 @@ class ToyBrain(Brain):
                          directory=directory, rewardbuffer=rewardbuffer)
 
     def think(self, inputs):
-        print("ERROR")
         return {entityid: random.randint(0, self.nactions - 1)
                 for entityid in inputs.keys()}
 
     def train(self, iters=1000000, batch=64, totreward=None):
         pass
+
+    def debug(self, debuginput):
+        return None
 
 
 class CombinedBrain(Brain):
@@ -94,7 +102,7 @@ class CombinedBrain(Brain):
         else:
             return self.brainB.think(inputs)
 
-    def train(self, iters=1000000, batch=64, totreward=None):
+    def train(self, iters, batch, totreward=None):
         self.brainA.train(iters=iters, batch=batch, totreward=totreward)
         self.brainB.train(iters=iters, batch=batch, totreward=totreward)
 
@@ -130,3 +138,13 @@ class CombinedBrain(Brain):
             return CombinedBrain(name, ninputs, nactions, brainA, brainB, p,
                                  directory=directory, rewardbuffer=rewardbuffer)
         return constructor
+
+    def print_diag(self, sample_in):
+        self.brainA.print_diag(sample_in)
+        self.brainB.print_diag(sample_in)
+
+    def debug(self, debuginput):
+        deba = self.brainA.debug(debuginput)
+        if deba is not None:
+            return deba
+        return self.brainB.debug(debuginput)
