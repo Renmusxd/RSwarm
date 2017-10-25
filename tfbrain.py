@@ -15,7 +15,7 @@ class TFBrain(Brain):
 
     # https://stats.stackexchange.com/questions/200006/q-learning-with-neural-network-as-function-approximation/200146
     # https://stats.stackexchange.com/questions/126994/questions-about-q-learning-using-neural-networks
-    def __init__(self, name, ninputs, nactions, hshapes=list((15,15)), gamma=0.99, directory="save", rewardbuffer=None):
+    def __init__(self, name, ninputs, nactions, hshapes=list((25,10)), gamma=0.9, directory="save", rewardbuffer=None):
         # Make a single session if not inherited
         super().__init__(name, ninputs, nactions,
                          directory=directory, rewardbuffer=rewardbuffer)
@@ -45,10 +45,15 @@ class TFBrain(Brain):
             # Q probs
             self.qprobs = tf.nn.softmax(self.Qout, 1)
             # Take random sample from each and put into array
-            self.chosen_actions = tf.reshape(tf.multinomial(tf.log(self.qprobs), 1), [-1])
+            self.prob_chosen_actions = tf.reshape(tf.multinomial(tf.log(self.qprobs), 1), [-1])
+
+            # Then combine them together to get our final Q-values.
+            self.prob_chosen_Q = tf.reduce_sum(tf.multiply(self.Qout,
+                                                      tf.one_hot(self.prob_chosen_actions, nactions, dtype=tf.float32)),
+                                          axis=1)
 
             # If we want just the highest Q value do the following
-            # self.chosen_actions = tf.argmax(self.Qout, 1)
+            self.chosen_actions = tf.argmax(self.Qout, 1)
 
             # Then combine them together to get our final Q-values.
             self.chosen_Q = tf.reduce_sum(tf.multiply(self.Qout,
@@ -111,6 +116,8 @@ class TFBrain(Brain):
         return state_in, layer, variables
 
     def get_checkpoint(self):
+        if not os.path.isdir(self.directory):
+            os.mkdir(self.directory)
         return os.path.join(self.directory, self.name)
 
     def has_checkpoint(self):
@@ -196,14 +203,7 @@ class TFBrain(Brain):
             TFBrain.WRITER.close()
 
     def print_diag(self, sample_in):
-        qout, dualqout = TFBrain.SESS.run([self.Qout, self.dualQout],
-                                          feed_dict={self.state_in: [sample_in],
-                                                     self.next_state: [sample_in]})
-
-        print("In:   ", formatarray(sample_in))
-
-        for q, a in zip(qout[0], Bot.ACTIONS):
-            print("\t{}:\t{:5.5f}".format(a,q))
+        pass
 
 
 def formatarray(array):

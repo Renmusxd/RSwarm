@@ -55,6 +55,10 @@ class PreyHeuristicBrain(Brain):
             return 'rmov'
         if sum(vision[-1]) == 0 and distance[-1] < 1.0:
             return 'lmov'
+        if sum(vision[-2]) != 0 and distance[-2] < 1.0:
+            return 'lmov'
+        if sum(vision[1]) != 0 and distance[1] < 1.0:
+            return 'rmov'
         # Other things
         return 'forward'
 

@@ -97,76 +97,77 @@ class RewardBuffer:
     def __len__(self):
         return self.size
 
-class HappyBuffer(object):
-    def __init__(self, name, inputsize, directory='save',buffersize=100000):
-        self.lezbuffer = RewardBuffer(name + 'lez', inputsize, directory=directory,buffersize=int(buffersize/2))
-        self.gtzbuffer = RewardBuffer(name + 'gtz', inputsize, directory=directory,buffersize=int(buffersize/2))
 
-    def reward(self, inputs, actions, rewards, newinputs):
-        posents = list(filter(lambda eid: rewards[eid] > 0, rewards.keys()))
-        nezents = list(filter(lambda eid: rewards[eid] <= 0, rewards.keys()))
+class PositiveReserveBuffer(RewardBuffer):
+    def __init__(self, name, inputsize, maxposratio=0.5, **kwargs):
+        super().__init__(name, inputsize, **kwargs)
+        self.maxposhead = int(self.buffersize*maxposratio)
+        self.poshead = 0
+        self.possize = 0
 
-        pinputs, pactions, prewards, pnewinputs = filterdictstokeys(posents, inputs, actions, rewards, newinputs)
-        ninputs, nactions, nrewards, nnewinputs = filterdictstokeys(nezents, inputs, actions, rewards, newinputs)
-
-        self.gtzbuffer.reward(pinputs, pactions, prewards, pnewinputs)
-        self.lezbuffer.reward(ninputs, nactions, nrewards, nnewinputs)
-
-
-    def get_batch_gen(self, batchsize, niters):
+    def reward(self,inputs,actions,rewards,newinputs):
         """
-        Make a generator which provides batches of items
-        :param batchsize: size of batch
-        :param niters: number of batches to produce
-        :return:
+        Provide dicts of {id:item}
+        :param inputs:
+        :param actions:
+        :param rewards:
+        :param newinputs:
         """
-        # Array of all (input, action, reward)
-        def gen():
-            # Choose and yield sets of results
-            NARRS = 4
-            for i in range(niters):
-                total = len(self)
-                ngtz = clamp(1, int(batchsize * len(self.gtzbuffer)/total), batchsize-1)
-                nlez = clamp(1, int(batchsize * len(self.gtzbuffer)/total), batchsize-1)
+        for entityid in inputs.keys():
+            entityin, entityact = inputs[entityid], actions[entityid]
+            entityrew, entitynewin = rewards[entityid], newinputs[entityid]
 
-                gtzchoices = numpy.random.choice(len(self.gtzbuffer),ngtz)
-                lezchoices = numpy.random.choice(len(self.lezbuffer),nlez)
+            print(self.poshead, self.head, self.possize, self.size)
 
-                gtzvals = self.gtzbuffer.states[gtzchoices], self.gtzbuffer.actions[gtzchoices], \
-                          self.gtzbuffer.rewards[gtzchoices], self.gtzbuffer.nextstates[gtzchoices]
+            if entityrew > 0:
+                # Displace old value, replace with new one
+                entityin, self.states[self.poshead, :] = self.states[self.poshead, :], entityin
+                entityact, self.actions[self.poshead] = self.actions[self.poshead], entityact
+                entityrew, self.rewards[self.poshead] = self.rewards[self.poshead], entityrew
+                entitynewin, self.nextstates[self.poshead, :] = self.nextstates[self.poshead, :], entitynewin
 
-                lezvals = self.lezbuffer.states[lezchoices], self.lezbuffer.actions[lezchoices], \
-                          self.lezbuffer.rewards[lezchoices], self.lezbuffer.nextstates[lezchoices]
+                # Increase poshead and wrap around if needed
+                self.poshead = (self.poshead + 1) % self.maxposhead
+                self.possize = min(self.possize+1, self.maxposhead)
 
-                yield tuple(numpy.concatenate([gtzvals[i],  lezvals[i]]) for i in range(NARRS))
-        if len(self.gtzbuffer) > 0 and len(self.lezbuffer) > 0:
-            return gen()
-        elif len(self.gtzbuffer) > 0:
-            return self.gtzbuffer.get_batch_gen(batchsize, niters)
-        else:
-            return self.lezbuffer.get_batch_gen(batchsize, niters)
+                # Make sure head is not inside the possize area
+                self.head = max(self.possize, self.head)
 
-    def clear(self):
-        self.lezbuffer.clear()
-        self.gtzbuffer.clear()
+            print(self.poshead, self.head, self.possize, self.size)
 
-    def save(self):
-        self.lezbuffer.save()
-        self.gtzbuffer.save()
+            if entityrew <= 0:
+                self.states[self.head, :] = entityin
+                self.actions[self.head] = entityact
+                self.rewards[self.head] = entityrew
+                self.nextstates[self.head, :] = entitynewin
 
-    def load(self):
-        self.lezbuffer.load()
-        self.gtzbuffer.load()
+                # Even if we added to pos, increase head to reflect larger size
+                self.head = max((self.head + 1) % self.buffersize, self.possize)
+                self.size = min(self.size+1, self.buffersize)
 
-    def __len__(self):
-        return len(self.lezbuffer) + len(self.gtzbuffer)
-
+            print(self.poshead, self.head, self.possize, self.size)
 
 def clamp(atleast, x, atmost):
     return max(atleast, min(x, atmost))
+
 
 def filterdictstokeys(keys, *dicts):
     newdicts = []
     for d in dicts:
         newdicts.append({key: d[key] for key in keys})
     return tuple(newdicts)
+
+
+if __name__ == '__main__':
+    r = PositiveReserveBuffer('TEST',1,buffersize=10)
+    r.rewards[:] = 0
+
+    def rew(x):
+        r.reward({0: 0}, {0: 0}, {0: x}, {0: 0})
+        print(r.rewards)
+
+    rew(-1)
+    rew(-1)
+    rew(1)
+    rew(1)
+    rew(-1)

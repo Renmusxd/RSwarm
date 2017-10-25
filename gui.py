@@ -124,6 +124,8 @@ class GUI:
                 senses, vis, dist = focussenses
             else:
                 senses, vis, dist = None, None, None
+            hasdist = dist is not None
+            hasvis = vis is not None
 
             # Vision cones
             vbins = Bot.VISION_BINS
@@ -142,11 +144,19 @@ class GUI:
                 highangle = binangle*(angleindx+1) + vlow
 
                 # Add 90.0 since bot-drawings are vertical, not rightwards
-                hasdist = dist is not None
+
                 lowx = vdist * numpy.cos(numpy.deg2rad(lowangle + 90.0)) * (dist[i] if hasdist else 1.0)
                 lowy = vdist * numpy.sin(numpy.deg2rad(lowangle + 90.0)) * (dist[i] if hasdist else 1.0)
                 highx = vdist * numpy.cos(numpy.deg2rad(highangle + 90.0)) * (dist[i] if hasdist else 1.0)
                 highy = vdist * numpy.sin(numpy.deg2rad(highangle + 90.0)) * (dist[i] if hasdist else 1.0)
+
+                if hasvis:
+                    if vis[i] == 0:
+                        glColor4f(0., 0., 0., 0.25)
+                    elif vis[i] == -1:
+                        glColor4f(1., 0., 0., 0.25)
+                    elif vis[i] == 1:
+                        glColor4f(0., 0., 1., 0.25)
 
                 glVertex2f(0, 0, 0)
                 glVertex2f(lowx, lowy, 0)
@@ -165,7 +175,7 @@ class GUI:
             glVertex2f(numpy.cos(i*angl), numpy.sin(i*angl), 0)
         glEnd()
 
-    def _draw_debug(self, senses, actions, font_size=24):
+    def _draw_debug(self, senses, actions, font_size=12):
         glLoadIdentity()
         if senses is not None:
             sense, vis, dist = senses
@@ -191,7 +201,7 @@ class GUI:
                 for i, k in enumerate(reversed(sorted(actions))):
                     label = pyglet.text.Label("",
                                               font_name='Times New Roman', font_size=font_size,
-                                              x=10, y=i*(font_size + 5),
+                                              x=10, y=(i+0.1)*(font_size + 5),
                                               color=[255,255,255,255])
                     self.action_label_cache.append(label)
             for label, k in zip(self.action_label_cache, reversed(sorted(actions))):
@@ -231,7 +241,7 @@ if __name__ == "__main__":
         world.startup()
         world.update(1)
 
-        win = pyglet.window.Window(1750, 1750)
+        win = pyglet.window.Window(750, 750)
         fps_display = pyglet.clock.ClockDisplay(format='%(fps).2f fps')
         gui = GUI(world, win.width, win.height)
 

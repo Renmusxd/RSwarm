@@ -24,7 +24,7 @@ class Bot:
     TURN_SPEED = 5.0
 
     # Radius for actions like attacking and mating
-    ACTION_RADIUS = 20
+    ACTION_RADIUS = 10
 
     EAT_AMOUNT = 20
 
@@ -64,6 +64,7 @@ class Bot:
         # Indicate that this Bot is attempting to mate
         self.mating = False
         self.attacking = False
+        self.attacked = False
         self.mate_timer = 0
 
     def senses(self):
@@ -118,7 +119,7 @@ class Bot:
         self.mate_timer = min(self.mate_timer, Bot.MATE_TIMER)
 
         # Punish death
-        if self.energy <= 0 or self.world.out_of_bounds(self.x,self.y):
+        if self.energy <= 0 or self.world.out_of_bounds(self.x,self.y) or self.attacked:
             reward_acc += self.DEATH_REWARD
             self.dead = True
         return reward_acc
@@ -143,13 +144,11 @@ class Bot:
         :return: Reward
         """
         self.attacking = False
-        dam = other.energy
+        other.attacked = True
         if self.can_graze:
-            other.energy -= dam
             return Bot.ATTACK_PREY_PREY_REWARD if other.can_graze else Bot.ATTACK_PREY_PRED_REWARD
         else:
-            self.energy += 10*dam
-            other.energy -= dam
+            self.energy += Bot.MAX_ENERGY + other.energy
             return Bot.ATTACK_PRED_PREY_REWARD if other.can_graze else Bot.ATTACK_PRED_PRED_REWARD
 
     def attack_failed(self):
@@ -157,6 +156,7 @@ class Bot:
         return Bot.ATTACK_FAILED_REWARD
 
     def was_attacked(self, other):
+        self.attacked = True
         return Bot.ATTACKED_REWARD
 
     @staticmethod

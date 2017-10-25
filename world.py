@@ -93,7 +93,8 @@ class World:
         for entitylist, rewards in zip(entitylists, entityrewards):
             attackers = list(filter(lambda b: b.attacking, entitylist.values()))
             max_d2 = Bot.ACTION_RADIUS ** 2
-            #TODO review attack code to make sure none of those annoying vision bugs are here
+
+            # TODO review attack code to make sure none of those annoying vision bugs are here
             # I'm pretty sure I've seen some BS
             for attacker in attackers:
                 closest_defender = None
@@ -108,14 +109,21 @@ class World:
                 for defender in itertools.chain(self.predentities.values(), self.preyentities.values()):
                     dist2 = (attacker.x - defender.x) ** 2 + (attacker.y - defender.y) ** 2
                     if 0 < dist2 <= closest_distance2:
-                        deltvec = numpy.array([attacker.x - defender.x, attacker.y - defender.y])
+                        deltvec = numpy.array([defender.x - attacker.x, defender.y - attacker.y])
                         dist = numpy.linalg.norm(deltvec)
-                        angle = numpy.arccos(dirvec.dot(deltvec) / dist) * numpy.sign(perpdirvec.dot(deltvec))
-                        if attacker.d - Bot.FOV < angle < attacker.d + Bot.FOV:
+                        normdelt = deltvec / dist
+
+                        # First get angle from d = 0, then subtract d
+                        z_angle = numpy.rad2deg(numpy.arccos(normdelt[0]))
+                        if normdelt[1] < 0:
+                            z_angle = -z_angle
+                        angle = modrange(z_angle - attacker.d, -180, 180)
+
+                        if -Bot.FOV < angle < Bot.FOV:
                             closest_defender = defender
                             closest_distance2 = dist2
                 if closest_defender is not None:
-                    print("{} attacking {} | {} attacking {}"
+                    self.log("{} attacking {} | {} attacking {}"
                           .format(attacker.id,
                                   closest_defender.id,
                                   "prey" if attacker.can_graze else "pred",
@@ -127,7 +135,7 @@ class World:
                     elif closest_defender.id in preyrewards:
                         preyrewards[closest_defender.id] += closest_defender.was_attacked(attacker)
 
-                    self.add_to_stat('Attacks',1)
+                    self.add_to_stat('Attacks', 1)
                 else:
                     rewards[attacker.id] += attacker.attack_failed()
 
@@ -154,7 +162,7 @@ class World:
                         closest_mater = mater_b
                         closest_distance2 = dist2
                 if closest_mater is not None:
-                    print("Successful mating | {}".format("prey" if mater_a.can_graze else "pred"))
+                    self.log("Successful mating | {}".format("prey" if mater_a.can_graze else "pred"))
                     # Mate mater_a and mater_b
                     avg_x, avg_y = (mater_a.x + closest_mater.x) / 2., (mater_a.y + closest_mater.y) / 2.
                     child_x = avg_x + random.randint(-10, 10)
@@ -166,7 +174,7 @@ class World:
                     rewards[mater_a.id] += mater_a.mate_succeed(closest_mater)
                     rewards[closest_mater.id] += closest_mater.mate_succeed(mater_a)
 
-                    self.add_to_stat("Mates",1)
+                    self.add_to_stat("Mates", 1)
                 else:
                     rewards[mater_a.id] += mater_a.mate_failed()
 
@@ -209,10 +217,10 @@ class World:
 
             self.clear_stats()
 
-            print("Done Training")
+            self.log("Done Training")
 
         if willreset:
-            print("Resetting world")
+            self.log("Resetting world")
             self.reset()
 
         self._clear_cache()
@@ -241,13 +249,16 @@ class World:
                 self.focus_actvals = None
 
     def printdebug(self):
-        print("Entering training cycle:")
-        print("Population:")
-        print("\tPred: {}".format(len(self.predentities)))
-        print("\tPrey: {}".format(len(self.preyentities)))
-        print("Stats:")
+        self.log("Entering training cycle:")
+        self.log("Population:")
+        self.log("\tPred: {}".format(len(self.predentities)))
+        self.log("\tPrey: {}".format(len(self.preyentities)))
+        self.log("Stats:")
         for k in sorted(self.stats.keys()):
-            print("\t{}:\t{}".format(k, self.stats[k]))
+            self.log("\t{}:\t{}".format(k, self.stats[k]))
+
+    def log(self, txt, end='\n'):
+        print("[{}] {}".format(self.time, txt), end=end)
 
     def cleandead(self):
         predkilllist = []
@@ -272,6 +283,8 @@ class World:
                     self.make_bot(entitylist, xpos, ypos, random.randint(0, 360), color, can_graze)
 
     def reset(self):
+        self.time = 0
+        self.stats.clear()
         self.predentities.clear()
         self.preyentities.clear()
         self._clear_cache()
