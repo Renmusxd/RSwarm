@@ -6,7 +6,7 @@ import random
 
 class Brain(metaclass=ABCMeta):
     DEFAULTBATCH = 64
-    DEFAULTITERS = 1000000
+    DEFAULTITERS = 10000000
 
     def __init__(self, name, ninputs, nactions, directory='save', rewardbuffer=None):
         """

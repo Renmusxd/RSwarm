@@ -6,7 +6,7 @@ import os
 
 
 class TFBrain(Brain):
-    DUALCOPYFREQ = 50
+    DUALCOPYFREQ = 5000
 
     SESS = None
     WRITER = None
@@ -75,7 +75,7 @@ class TFBrain(Brain):
 
             self.td_error = tf.square(self.targetQ - self.Q)
             self.loss = tf.reduce_mean(self.td_error)
-            self.trainer = tf.train.AdamOptimizer(learning_rate=0.0005)
+            self.trainer = tf.train.AdamOptimizer(learning_rate=0.0002)
             self.updateModel = self.trainer.minimize(self.loss, global_step=self.global_step)
 
             self.saver = tf.train.Saver()
@@ -132,6 +132,9 @@ class TFBrain(Brain):
             print("No checkpoint found")
 
     def think(self, inputs):
+        if len(inputs) == 0:
+            return {}
+
         ids = list(inputs.keys())
         acts = TFBrain.SESS.run(self.chosen_actions,
                                 feed_dict={self.state_in: [inputs[entityid] for entityid in ids]})
@@ -155,6 +158,8 @@ class TFBrain(Brain):
 
         print("Buffer size: {}".format(len(self.buffer)))
         training_gen = self.buffer.get_batch_gen(batchsize=batch, niters=int(TFBrain.DUALCOPYFREQ))
+        print("Gen niters: {}".format(int(TFBrain.DUALCOPYFREQ)))
+        print("\tncopies: {}".format(int(iters/TFBrain.DUALCOPYFREQ)))
         for i in range(int(iters/TFBrain.DUALCOPYFREQ)):
             self.trainbatch(training_gen)
 

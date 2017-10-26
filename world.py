@@ -19,7 +19,7 @@ class World:
     MIN_BOT_REGEN = 2
     MAX_BOT_REGEN = 5
 
-    TRAIN_FREQ = 500
+    TRAIN_FREQ = 1000
     WORLD_RESET_FREQ = 5000
 
     PRED_COLOR = (1., 0., 0.)
@@ -49,38 +49,76 @@ class World:
         A giant ugly update function for game logic. Will clean up later
         :param dt: dt passed by opengl if desired
         """
-        # Kill
-        self.cleandead()
 
-        entitylists = [self.predentities, self.preyentities]
-        entitycolors = [World.PRED_COLOR, World.PREY_COLOR]
-        entitygrazes = [False, True]
+        allpredsenses, allpreysenses = self.getsensesdicts()
 
-        # Regen population for each entity list if below MIN_BOTS
-        if self.shouldrestock:
-            self.restock(entitylists, entitycolors, entitygrazes)
+        # Feed into brain and get actions
+        allpredactions = self.predbrain.think(allpredsenses)
+        allpreyactions = self.preybrain.think(allpreysenses)
 
+        allpredrewards, allpreyrewards, newpredsenses, newpreysenses = self.actdicts(allpredactions, allpreyactions)
+
+        if focusid in newpredsenses:
+            focussenses = newpredsenses[focusid]
+            focusactions = self.predbrain.debug(focussenses)
+        elif focusid in newpreysenses:
+            focussenses = newpreysenses[focusid]
+            focusactions = self.preybrain.debug(focussenses)
+        else:
+            focussenses = None
+            focusactions = None
+
+        # Store state, action, reward
+        self.predbrain.reward(allpredsenses, allpredactions, allpredrewards, newpredsenses)
+        self.preybrain.reward(allpreysenses, allpreyactions, allpreyrewards, newpreysenses)
+
+        self.time += 1
+
+        willtrain = (self.time % World.TRAIN_FREQ) == 0
+        willreset = (self.time % World.WORLD_RESET_FREQ) == 0
+
+        # Push all to buffer, push focus if available
+        self.pushtobuffer(focussenses, focusactions)
+
+        if willtrain:
+            self.printdebug()
+
+            self.predbrain.train(Brain.DEFAULTITERS, Brain.DEFAULTBATCH,
+                                 totreward=self.stats['Predreward'])
+            self.preybrain.train(Brain.DEFAULTITERS, Brain.DEFAULTBATCH,
+                                 totreward=self.stats['Preyreward'])
+            # self.predbrain.save()
+            # self.preybrain.save()
+
+            if len(self.predentities) > 0:
+                randomentity = random.choice(list(self.predentities.values()))
+                self.predbrain.print_diag(randomentity.senses())
+            if len(self.predentities) > 0:
+                randomentity = random.choice(list(self.preyentities.values()))
+                self.preybrain.print_diag(randomentity.senses())
+
+            self.clear_stats()
+
+            self.log("Done Training")
+
+        if willreset:
+            self.log("Resetting world")
+            self.reset()
+
+    def getsensesdicts(self):
         # Get sensory data from all entities
         allpredsenses = {entityid: self.predentities[entityid].senses()
                          for entityid in self.predentities.keys()}
         allpreysenses = {entityid: self.preyentities[entityid].senses()
                          for entityid in self.preyentities.keys()}
-        entitysenses = [allpredsenses, allpreysenses]
 
-        # Feed into brain and get actions
-        allpredactions = self.predbrain.think(allpredsenses)
-        allpreyactions = self.preybrain.think(allpreysenses)
-        entityactions = [allpredactions, allpreyactions]
+        return allpredsenses, allpreysenses
 
-        if focusid in self.predentities:
-            focussenses = allpredsenses[focusid]
-            focusactions = self.predbrain.debug(focussenses)
-        elif focusid in self.preyentities:
-            focussenses = allpreysenses[focusid]
-            focusactions = self.preybrain.debug(focussenses)
-        else:
-            focussenses = None
-            focusactions = None
+    def actdicts(self, allpredactions, allpreyactions):
+
+        entitylists = [self.predentities, self.preyentities]
+        entitycolors = [World.PRED_COLOR, World.PREY_COLOR]
+        entitygrazes = [False, True]
 
         # Apply actions
         predrewards = {entityid: self.predentities[entityid].act(allpredactions[entityid])
@@ -94,40 +132,24 @@ class World:
             attackers = list(filter(lambda b: b.attacking, entitylist.values()))
             max_d2 = Bot.ACTION_RADIUS ** 2
 
-            # TODO review attack code to make sure none of those annoying vision bugs are here
-            # I'm pretty sure I've seen some BS
             for attacker in attackers:
                 closest_defender = None
                 closest_distance2 = max_d2
-                # Vector in direction of sight
-                dirvec = numpy.array([numpy.cos(numpy.deg2rad(attacker.d)),
-                                      numpy.sin(numpy.deg2rad(attacker.d))])
-                # Vector perpendicular (to the left) of the direction of sight
-                perpdirvec = numpy.array([numpy.cos(numpy.deg2rad(attacker.d + 90)),
-                                          numpy.sin(numpy.deg2rad(attacker.d + 90))])
                 # Check in both lists, add if closest and within sight range
                 for defender in itertools.chain(self.predentities.values(), self.preyentities.values()):
                     dist2 = (attacker.x - defender.x) ** 2 + (attacker.y - defender.y) ** 2
                     if 0 < dist2 <= closest_distance2:
-                        deltvec = numpy.array([defender.x - attacker.x, defender.y - attacker.y])
-                        dist = numpy.linalg.norm(deltvec)
-                        normdelt = deltvec / dist
-
-                        # First get angle from d = 0, then subtract d
-                        z_angle = numpy.rad2deg(numpy.arccos(normdelt[0]))
-                        if normdelt[1] < 0:
-                            z_angle = -z_angle
-                        angle = modrange(z_angle - attacker.d, -180, 180)
-
+                        angle = anglediff(attacker.x, attacker.y, attacker.d, defender.x, defender.y)
                         if -Bot.FOV < angle < Bot.FOV:
                             closest_defender = defender
                             closest_distance2 = dist2
+
                 if closest_defender is not None:
-                    self.log("{} attacking {} | {} attacking {}"
-                          .format(attacker.id,
-                                  closest_defender.id,
-                                  "prey" if attacker.can_graze else "pred",
-                                  "prey" if closest_defender.can_graze else "pred"))
+                    self.log("{} attacking {} | {} attacking {}".format(attacker.id,
+                                                                        closest_defender.id,
+                                                                        "prey" if attacker.can_graze else "pred",
+                                                                        "prey" if closest_defender.can_graze else "pred"
+                                                                        ))
                     rewards[attacker.id] += attacker.attack_succeed(closest_defender)
                     # Not pretty, is there a "join dict" structure I can use?
                     if closest_defender.id in predrewards:
@@ -178,52 +200,22 @@ class World:
                 else:
                     rewards[mater_a.id] += mater_a.mate_failed()
 
+        if len(predrewards) > 0:
+            self.add_to_stat('Predreward', sum(predrewards.values()) / len(predrewards))
+        if len(preyrewards) > 0:
+            self.add_to_stat('Preyreward', sum(preyrewards.values()) / len(preyrewards))
+
         # Get sensory data from all entities
-        newpredsenses = {entityid: self.predentities[entityid].senses()
-                         for entityid in self.predentities.keys()}
-        newpreysenses = {entityid: self.preyentities[entityid].senses()
-                         for entityid in self.preyentities.keys()}
-        newentitysenses = [newpredsenses, newpreysenses]
+        newpredsenses, newpreysenses = self.getsensesdicts()
 
-        # Store state, action, reward
-        self.predbrain.reward(allpredsenses, allpredactions, predrewards, newpredsenses)
-        self.preybrain.reward(allpreysenses, allpreyactions, preyrewards, newpreysenses)
+        # Kill
+        self.cleandead()
 
-        self.add_to_stat('Predreward',sum(predrewards.values()))
-        self.add_to_stat('Preyreward',sum(preyrewards.values()))
+        # Regen population for each entity list if below MIN_BOTS
+        if self.shouldrestock:
+            self.restock(entitylists, entitycolors, entitygrazes)
 
-        self.time += 1
-
-        willtrain = (self.time % World.TRAIN_FREQ) == 0
-        willreset = (self.time % World.WORLD_RESET_FREQ) == 0
-
-        # Push all to buffer, push focus if available
-        self.pushtobuffer(focussenses, focusactions)
-
-        if willtrain:
-            self.printdebug()
-
-            self.predbrain.train(Brain.DEFAULTITERS, Brain.DEFAULTBATCH, totreward=self.stats['Predreward'])
-            self.preybrain.train(Brain.DEFAULTITERS, Brain.DEFAULTBATCH, totreward=self.stats['Preyreward'])
-            # self.predbrain.save()
-            # self.preybrain.save()
-
-            if len(self.predentities) > 0:
-                randomentity = random.choice(list(self.predentities.values()))
-                self.predbrain.print_diag(randomentity.senses())
-            if len(self.predentities) > 0:
-                randomentity = random.choice(list(self.preyentities.values()))
-                self.preybrain.print_diag(randomentity.senses())
-
-            self.clear_stats()
-
-            self.log("Done Training")
-
-        if willreset:
-            self.log("Resetting world")
-            self.reset()
-
-        self._clear_cache()
+        return predrewards, preyrewards, newpredsenses, newpreysenses
 
     def pushtobuffer(self, focussenses, focusactions):
         with self.lock:
@@ -360,16 +352,7 @@ class World:
             # Skip self
             if entity.x == x and entity.y == y:
                 continue
-            deltvec = numpy.array([entity.x - x, entity.y - y])
-            dist = numpy.linalg.norm(deltvec)
-            normdelt = deltvec/dist
-
-            # First get angle from d = 0, then subtract d
-            z_angle = numpy.rad2deg(numpy.arccos(normdelt[0]))
-            if normdelt[1] < 0:
-                z_angle = -z_angle
-            angle = modrange(z_angle - centerd, -180, 180)
-
+            angle, dist = anglediff(x, y, centerd, entity.x, entity.y, retdist=True)
             # If angle in FOV
             if -fov < angle < fov:
                 # Get bin
@@ -479,6 +462,22 @@ class World:
     def clear_stats(self):
         for stat in self.stats:
             self.stats[stat] = 0
+
+
+def anglediff(x1, y1, d1, x2, y2, retdist=False):
+    deltvec = numpy.array([x2 - x1, y2 - y1])
+    dist = numpy.linalg.norm(deltvec)
+    normdelt = deltvec / dist
+
+    # First get angle from d = 0, then subtract d
+    z_angle = numpy.rad2deg(numpy.arccos(normdelt[0]))
+    if normdelt[1] < 0:
+        z_angle = -z_angle
+    angle = modrange(z_angle - d1, -180, 180)
+    if retdist:
+        return angle, dist
+    else:
+        return angle
 
 
 def modrange(x,low,high):
