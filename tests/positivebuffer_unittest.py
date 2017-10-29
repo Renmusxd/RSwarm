@@ -1,59 +1,54 @@
 import unittest
 import numpy
 
-from world import World
-from brain import Brain
-from bot import Bot
+import random
+from rewardbuffer import PositiveReserveBuffer
 
 
-class QueueBrain(Brain):
-    def __init__(self, name, ninputs, nactions):
-        super().__init__(name, ninputs, nactions)
-        self.actlam = lambda _: 'still'
-        self.repeat = True
+class PositiveTestSuite(unittest.TestCase):
 
-    def think(self, inputs):
-        if self.actlam is None:
-            raise Exception("No action specified and repeat set to false")
-        acts = {k: Bot.make_actions_from_label(self.actlam(k)) for k in inputs}
-        if not self.repeat:
-            self.actlam = None
-        return acts
+    def test_random_ensure(self):
+        N = 1000
+        R = 0.5
+        MAXP = int(R*N)
+        MAXN = int((1-R)*N)
 
-    def queue_action(self, actlam, repeat=False):
-        self.actlam = actlam
-        self.repeat = repeat
+        r = PositiveReserveBuffer('test', 1, maxposratio=0.5, buffersize=int(N/2))
 
-    def train(self, iters, batch, totreward=None):
-        pass
+        lastnegatives = 0
+        lastpositives = 0
+        for i in range(N):
+            toadd = 1 if random.randint(0,1) == 0 else -1
 
+            rew(r, toadd)
+            uniques, counts = numpy.unique(r.rewards[:i+1], return_counts=True)
 
-class AttackTestSuite(unittest.TestCase):
+            # Make sure only -1 and 1
+            self.assertLessEqual(len(uniques),2, msg="Only 1/-1 allowed in {}".format(uniques))
 
-    def test_center_dist(self):
-        POSX, POSY = 100,100
+            newpositives = 0
+            newnegatives = 0
+            for item, count in zip(uniques, counts):
+                if item < 0:
+                    newnegatives = count
+                elif item > 0:
+                    newpositives = count
 
-        world = World(QueueBrain, QueueBrain, restockbots=False)
-        predbrain = world.predbrain
-        preybrain = world.preybrain
+            if toadd > 0:
+                self.assertTrue(lastpositives == newpositives or lastpositives == newpositives - 1,
+                                "Positive didn't increase or maintain count: {}-{}".format(lastpositives,newpositives))
+                # self.assertTrue(lastnegatives == newnegatives,
+                #                 "Positive changed negative count")
+            elif toadd < 0:
+                self.assertTrue(lastnegatives == newnegatives or lastnegatives == newnegatives - 1,
+                                "Negative didn't increase or maintain count: {}-{}".format(lastnegatives,newnegatives))
+                self.assertTrue(lastpositives == newpositives,
+                                "Negative changed positive count: {}-{}".format(lastpositives,newpositives))
 
-        for i in range(360):
-            b = world.make_pred(POSX,POSY,i)
-            x,y = get_pos_d_from(POSX,POSY,i,Bot.ACTION_RADIUS/2.0)
-            c = world.make_prey(x,y,0)
+            lastnegatives, lastpositives = newnegatives, newpositives
 
-            predbrain.queue_action(lambda _: 'atck')
-            world.update(0, b.id)
-
-            self.assertEqual(world.stats['Attacks'], 1)
-
-            world.reset()
-
-
-def get_pos_d_from(x, y, d, dist):
-    dx = numpy.cos(numpy.deg2rad(d)) * dist
-    dy = numpy.sin(numpy.deg2rad(d)) * dist
-    return x + dx, y + dy
+def rew(r,x):
+    r.reward({0: 0}, {0: 0}, {0: x}, {0: 0})
 
 
 if __name__ == '__main__':
