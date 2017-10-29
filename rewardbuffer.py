@@ -104,6 +104,7 @@ class PositiveReserveBuffer(RewardBuffer):
         self.maxposhead = int(self.buffersize*maxposratio)
         self.poshead = 0
         self.possize = 0
+        self.negzsize = 0
 
     def reward(self,inputs,actions,rewards,newinputs):
         """
@@ -117,8 +118,7 @@ class PositiveReserveBuffer(RewardBuffer):
             entityin, entityact = inputs[entityid], actions[entityid]
             entityrew, entitynewin = rewards[entityid], newinputs[entityid]
 
-            # print(self.poshead, self.head, self.possize, self.size)
-
+            evictedempty = False
             if entityrew > 0:
                 # Displace old value, replace with new one
                 entityin, self.states[self.poshead, :] = self.states[self.poshead, :], entityin
@@ -133,9 +133,11 @@ class PositiveReserveBuffer(RewardBuffer):
                 # Make sure head is not inside the possize area
                 self.head = max(self.possize, self.head)
 
-            # print(self.poshead, self.head, self.possize, self.size)
+                if self.negzsize == 0:
+                    evictedempty = True
 
-            if entityrew <= 0:
+            # Bug here is when an empty row gets evicted from above
+            if entityrew <= 0 and not evictedempty:
                 self.states[self.head, :] = entityin
                 self.actions[self.head] = entityact
                 self.rewards[self.head] = entityrew
@@ -143,9 +145,9 @@ class PositiveReserveBuffer(RewardBuffer):
 
                 # Even if we added to pos, increase head to reflect larger size
                 self.head = max((self.head + 1) % self.buffersize, self.possize)
-                self.size = min(self.size+1, self.buffersize)
+                self.negzsize += 1
 
-            # print(self.poshead, self.head, self.possize, self.size)
+            self.size = min(self.size+1, self.buffersize)
 
 def clamp(atleast, x, atmost):
     return max(atleast, min(x, atmost))
@@ -166,6 +168,7 @@ if __name__ == '__main__':
         r.reward({0: 0}, {0: 0}, {0: x}, {0: 0})
         print(r.rewards)
 
+    rew(1)
     rew(-1)
     rew(-1)
     rew(1)
