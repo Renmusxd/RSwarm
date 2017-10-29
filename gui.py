@@ -28,10 +28,19 @@ class GUI:
 
         self.sense_label_cache = None
         self.action_label_cache = None
+        self.z = z
         if z is None:
-            worldxsize = World.TILE_SIZE * world.tileshape[0]
-            worldysize = World.TILE_SIZE * world.tileshape[1]
-            self.z = min(self.ww/worldxsize,self.wh/worldysize)
+           self.resize(windowwidth, windowheight)
+
+    def resize(self, windowwidth, windowheight):
+        self.ww, self.wh = windowwidth, windowheight
+        worldxsize = World.TILE_SIZE * world.tileshape[0]
+        worldysize = World.TILE_SIZE * world.tileshape[1]
+        self.z = min(self.ww / worldxsize, self.wh / worldysize)
+
+        # Need to rebuild labels
+        self.sense_label_cache = None
+        self.action_label_cache = None
 
     def update(self):
         # Change dx, dy
@@ -241,7 +250,7 @@ if __name__ == "__main__":
         world.startup()
         world.update(1)
 
-        win = pyglet.window.Window(750, 750)
+        win = pyglet.window.Window(1750, 1750, resizable=True)
         fps_display = pyglet.clock.ClockDisplay(format='%(fps).2f fps')
         gui = GUI(world, win.width, win.height)
 
@@ -298,6 +307,10 @@ if __name__ == "__main__":
             if button == pyglet.window.mouse.LEFT:
                 print('The left mouse button was pressed: {},{}'.format(x, y))
                 gui.selectnear(x,y)
+
+        @win.event
+        def on_resize(width, height):
+            gui.resize(width, height)
 
         pyglet.app.run()
     finally:

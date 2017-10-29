@@ -117,7 +117,7 @@ class PositiveReserveBuffer(RewardBuffer):
             entityin, entityact = inputs[entityid], actions[entityid]
             entityrew, entitynewin = rewards[entityid], newinputs[entityid]
 
-            print(self.poshead, self.head, self.possize, self.size)
+            # print(self.poshead, self.head, self.possize, self.size)
 
             if entityrew > 0:
                 # Displace old value, replace with new one
@@ -133,7 +133,7 @@ class PositiveReserveBuffer(RewardBuffer):
                 # Make sure head is not inside the possize area
                 self.head = max(self.possize, self.head)
 
-            print(self.poshead, self.head, self.possize, self.size)
+            # print(self.poshead, self.head, self.possize, self.size)
 
             if entityrew <= 0:
                 self.states[self.head, :] = entityin
@@ -145,7 +145,7 @@ class PositiveReserveBuffer(RewardBuffer):
                 self.head = max((self.head + 1) % self.buffersize, self.possize)
                 self.size = min(self.size+1, self.buffersize)
 
-            print(self.poshead, self.head, self.possize, self.size)
+            # print(self.poshead, self.head, self.possize, self.size)
 
 def clamp(atleast, x, atmost):
     return max(atleast, min(x, atmost))

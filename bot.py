@@ -91,19 +91,17 @@ class Bot:
                 self.energy += eaten
                 # reward_acc += eaten/Bot.EAT_AMOUNT * (Bot.MAX_ENERGY - self.energy)/Bot.MAX_ENERGY * Bot.EAT_REWARD
                 reward_acc += eaten * Bot.EAT_REWARD * (Bot.MAX_ENERGY - self.energy)/(Bot.EAT_AMOUNT * Bot.MAX_ENERGY)
-            self.energy -= 1
         elif mate:
             # Check if meets mating criteria
             # Reward will be added later if mate is successful
             if self.mate_timer == Bot.MATE_TIMER and self.energy > Bot.MAX_ENERGY/2:
                 self.mating = True
-            self.energy -= 1
         elif atck:
             self.attacking = True
         elif sprint:
             self.x += Bot.SPRINT_SPEED * numpy.cos(numpy.deg2rad(self.d))
             self.y += Bot.SPRINT_SPEED * numpy.sin(numpy.deg2rad(self.d))
-            self.energy -= Bot.SPRINT_SPEED
+            self.energy -= (Bot.SPRINT_SPEED - 1)
         elif not still:
             if left or lmov:
                 self.d -= Bot.TURN_SPEED
@@ -112,8 +110,8 @@ class Bot:
             if lmov or forward or rmov:
                 self.x += Bot.MOVE_SPEED * numpy.cos(numpy.deg2rad(self.d))
                 self.y += Bot.MOVE_SPEED * numpy.sin(numpy.deg2rad(self.d))
-            self.energy -= 1
 
+        self.energy -= 1
         self.mate_timer += 1
 
         self.mate_timer = min(self.mate_timer, Bot.MATE_TIMER)
@@ -148,7 +146,8 @@ class Bot:
         if self.can_graze:
             return Bot.ATTACK_PREY_PREY_REWARD if other.can_graze else Bot.ATTACK_PREY_PRED_REWARD
         else:
-            self.energy += Bot.MAX_ENERGY + other.energy
+            #self.energy += Bot.MAX_ENERGY + other.energy
+            self.energy = Bot.MAX_ENERGY
             return Bot.ATTACK_PRED_PREY_REWARD if other.can_graze else Bot.ATTACK_PRED_PRED_REWARD
 
     def attack_failed(self):

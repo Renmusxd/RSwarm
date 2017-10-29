@@ -6,7 +6,7 @@ import os
 
 
 class TFBrain(Brain):
-    DUALCOPYFREQ = 5000
+    DUALCOPYFREQ = 1000
 
     SESS = None
     WRITER = None
@@ -49,8 +49,9 @@ class TFBrain(Brain):
 
             # Then combine them together to get our final Q-values.
             self.prob_chosen_Q = tf.reduce_sum(tf.multiply(self.Qout,
-                                                      tf.one_hot(self.prob_chosen_actions, nactions, dtype=tf.float32)),
-                                          axis=1)
+                                                           tf.one_hot(self.prob_chosen_actions, nactions,
+                                                                      dtype=tf.float32)),
+                                               axis=1)
 
             # If we want just the highest Q value do the following
             self.chosen_actions = tf.argmax(self.Qout, 1)
@@ -85,7 +86,7 @@ class TFBrain(Brain):
                 self.rewardsumvar = tf.placeholder(shape=(), name="episode_reward", dtype=tf.float32)
                 self.rewardsum = tf.summary.scalar('reward', self.rewardsumvar)
 
-    def makeqnetwork(self, shape):
+    def makeqnetwork(self, shape, valueshape=None, advantageshape=None):
         """
         Construct graph
         :param inputshape:
@@ -157,10 +158,10 @@ class TFBrain(Brain):
             TFBrain.WRITER.add_summary(rewardsum, global_step)
 
         print("Buffer size: {}".format(len(self.buffer)))
-        training_gen = self.buffer.get_batch_gen(batchsize=batch, niters=int(TFBrain.DUALCOPYFREQ))
         print("Gen niters: {}".format(int(TFBrain.DUALCOPYFREQ)))
         print("\tncopies: {}".format(int(iters/TFBrain.DUALCOPYFREQ)))
         for i in range(int(iters/TFBrain.DUALCOPYFREQ)):
+            training_gen = self.buffer.get_batch_gen(batchsize=batch, niters=int(TFBrain.DUALCOPYFREQ))
             self.trainbatch(training_gen)
 
     def trainbatch(self, gen):
