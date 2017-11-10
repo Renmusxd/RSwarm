@@ -37,6 +37,7 @@ class PositiveTestSuite(unittest.TestCase):
             if toadd > 0:
                 self.assertTrue(lastpositives == newpositives or lastpositives == newpositives - 1,
                                 "Positive didn't increase or maintain count: {}-{}".format(lastpositives,newpositives))
+                # Positive may evict negative, otherwise would include
                 # self.assertTrue(lastnegatives == newnegatives,
                 #                 "Positive changed negative count")
             elif toadd < 0:
@@ -46,6 +47,7 @@ class PositiveTestSuite(unittest.TestCase):
                                 "Negative changed positive count: {}-{}".format(lastpositives,newpositives))
 
             lastnegatives, lastpositives = newnegatives, newpositives
+
 
 def rew(r,x):
     r.reward({0: 0}, {0: 0}, {0: x}, {0: 0})

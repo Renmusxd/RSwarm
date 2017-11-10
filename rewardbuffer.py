@@ -149,6 +149,7 @@ class PositiveReserveBuffer(RewardBuffer):
 
             self.size = min(self.size+1, self.buffersize)
 
+
 def clamp(atleast, x, atmost):
     return max(atleast, min(x, atmost))
 

@@ -137,7 +137,7 @@ class TFBrain(Brain):
             return {}
 
         ids = list(inputs.keys())
-        acts = TFBrain.SESS.run(self.chosen_actions,
+        acts = TFBrain.SESS.run(self.prob_chosen_actions,
                                 feed_dict={self.state_in: [inputs[entityid] for entityid in ids]})
         return {entityid: act for entityid, act in zip(ids, acts)}
 
@@ -188,7 +188,6 @@ class TFBrain(Brain):
             init = tf.global_variables_initializer()
             TFBrain.SESS.run(init)
         self.loadcheckpoint()
-
 
     def save(self):
         """
