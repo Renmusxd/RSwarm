@@ -137,6 +137,7 @@ class TFBrain(Brain):
             return {}
 
         ids = list(inputs.keys())
+        # Here we can choose either prob_chosen_actions or chosen_actions
         acts = TFBrain.SESS.run(self.prob_chosen_actions,
                                 feed_dict={self.state_in: [inputs[entityid] for entityid in ids]})
         return {entityid: act for entityid, act in zip(ids, acts)}
