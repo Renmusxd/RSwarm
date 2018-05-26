@@ -132,7 +132,7 @@ class TFBrain(Brain):
         else:
             print("No checkpoint found")
 
-    def think(self, inputs):
+    def think(self, inputs, memory):
         if len(inputs) == 0:
             return {}
 
@@ -140,9 +140,9 @@ class TFBrain(Brain):
         # Here we can choose either prob_chosen_actions or chosen_actions
         acts = TFBrain.SESS.run(self.prob_chosen_actions,
                                 feed_dict={self.state_in: [inputs[entityid] for entityid in ids]})
-        return {entityid: act for entityid, act in zip(ids, acts)}
+        return {entityid: act for entityid, act in zip(ids, acts)}, {}
 
-    def debug(self,debuginput):
+    def debug(self,debuginput,debugmemory):
         actprobs = TFBrain.SESS.run(self.qprobs, feed_dict={self.state_in: [debuginput]})
         return actprobs[0]
 

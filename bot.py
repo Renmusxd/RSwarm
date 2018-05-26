@@ -67,6 +67,8 @@ class Bot:
         self.attacked = False
         self.mate_timer = 0
 
+        self.mem = None
+
     def senses(self):
         # Evaluate vision
         vision = Bot.VISION.eval(self)
@@ -76,6 +78,12 @@ class Bot:
         state = numpy.concatenate((body, vision))
 
         return state
+
+    def memory(self):
+        return self.mem
+
+    def set_memory(self, memory):
+        self.mem = memory
 
     def act(self, action):
         reward_acc = 0

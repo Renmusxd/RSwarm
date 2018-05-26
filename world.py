@@ -51,19 +51,20 @@ class World:
         """
 
         allpredsenses, allpreysenses = self.getsensesdicts()
+        allpredmemory, allpreymemory = self.getmemorydicts()
 
         # Feed into brain and get actions
-        allpredactions = self.predbrain.think(allpredsenses)
-        allpreyactions = self.preybrain.think(allpreysenses)
+        allpredactions, allpredmemory = self.predbrain.think(allpredsenses)
+        allpreyactions, allpreymemory = self.preybrain.think(allpreysenses)
 
         allpredrewards, allpreyrewards, newpredsenses, newpreysenses = self.actdicts(allpredactions, allpreyactions)
 
         if focusid in newpredsenses:
             focussenses = newpredsenses[focusid]
-            focusactions = self.predbrain.debug(focussenses)
+            focusactions = self.predbrain.debug(focussenses, )
         elif focusid in newpreysenses:
             focussenses = newpreysenses[focusid]
-            focusactions = self.preybrain.debug(focussenses)
+            focusactions = self.preybrain.debug(focussenses, )
         else:
             focussenses = None
             focusactions = None
@@ -111,8 +112,15 @@ class World:
                          for entityid in self.predentities.keys()}
         allpreysenses = {entityid: self.preyentities[entityid].senses()
                          for entityid in self.preyentities.keys()}
-
         return allpredsenses, allpreysenses
+
+    def getmemorydicts(self):
+        # Get memory data from all entities
+        allpredmemory = {entityid: self.predentities[entityid].memory() or self.predbrain.default_memory()
+                         for entityid in self.predentities.keys()}
+        allpreymemory = {entityid: self.preyentities[entityid].memory() or self.preybrain.default_memory()
+                         for entityid in self.preyentities.keys()}
+        return allpredmemory, allpreymemory
 
     def actdicts(self, allpredactions, allpreyactions):
 

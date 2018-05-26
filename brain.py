@@ -23,11 +23,12 @@ class Brain(metaclass=ABCMeta):
         self.buffer = rewardbuffer
 
     @abstractmethod
-    def think(self, inputs):
+    def think(self, inputs, memory):
         """
         Provides actions for inputs
         :param inputs: dictionary of id:input to think about
-        :return: dictionary of id:actions
+        :param memory: dictionary of id:memory to use while thinking
+        :return: dictionary of id:actions, dictionary of id:memory
         """
         raise NotImplementedError
 
@@ -66,7 +67,14 @@ class Brain(metaclass=ABCMeta):
         """
         self.buffer.reward(inputs, actions, rewards, newinputs)
 
-    def debug(self,debuginput):
+    def default_memory(self):
+        """
+        Get the default memory for this brain.
+        :return: Memory object of type dependent on brain.
+        """
+        return None
+
+    def debug(self,debuginput,debugmemory):
         return None
 
 
@@ -75,14 +83,14 @@ class ToyBrain(Brain):
         super().__init__(name, ninputs, nactions,
                          directory=directory, rewardbuffer=rewardbuffer)
 
-    def think(self, inputs):
+    def think(self, inputs, memory):
         return {entityid: random.randint(0, self.nactions - 1)
-                for entityid in inputs.keys()}
+                for entityid in inputs.keys()}, {}
 
     def train(self, iters=1000000, batch=64, totreward=None):
         pass
 
-    def debug(self, debuginput):
+    def debug(self, debuginput,debugmemory):
         return None
 
 
@@ -96,11 +104,11 @@ class CombinedBrain(Brain):
         self.brainA, self.brainB = brainA, brainB
         self.p = prob
 
-    def think(self, inputs):
+    def think(self, inputs, memory):
         if random.random() < self.p:
-            return self.brainA.think(inputs)
+            return self.brainA.think(inputs, memory)
         else:
-            return self.brainB.think(inputs)
+            return self.brainB.think(inputs, memory)
 
     def train(self, iters, batch, totreward=None):
         self.brainA.train(iters=iters, batch=batch, totreward=totreward)
@@ -143,8 +151,8 @@ class CombinedBrain(Brain):
         self.brainA.print_diag(sample_in)
         self.brainB.print_diag(sample_in)
 
-    def debug(self, debuginput):
-        deba = self.brainA.debug(debuginput)
+    def debug(self, debuginput,debugmemory):
+        deba = self.brainA.debug(debuginput, )
         if deba is not None:
             return deba
-        return self.brainB.debug(debuginput)
+        return self.brainB.debug(debuginput, )

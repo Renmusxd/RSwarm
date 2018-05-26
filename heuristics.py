@@ -8,9 +8,9 @@ class PredHeuristicBrain(Brain):
     def __init__(self, name, ninputs, nactions, **kwargs):
         super().__init__(name, ninputs, nactions, **kwargs)
 
-    def think(self, inputs):
+    def think(self, inputs, memory):
         return {bid: Bot.make_actions_from_label(self.think_indiv(inputs[bid]))
-                for bid in inputs}
+                for bid in inputs}, {}
 
     def think_indiv(self,inputs):
         inputs, vision, distance = Bot.split_senses(inputs)
@@ -37,9 +37,9 @@ class PreyHeuristicBrain(Brain):
     def __init__(self, name, ninputs, nactions, **kwargs):
         super().__init__(name, ninputs, nactions, **kwargs)
 
-    def think(self, inputs):
+    def think(self, inputs, memory):
         return {bid: Bot.make_actions_from_label(self.think_indiv(inputs[bid]))
-                for bid in inputs}
+                for bid in inputs}, {}
 
     def think_indiv(self, inputs):
         inputs, vision, distance = Bot.split_senses(inputs)
